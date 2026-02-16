@@ -2,6 +2,7 @@ import "./globals.css";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
 import { Toaster } from "react-hot-toast";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata = {
   title: "SmartBiz SaaS",
