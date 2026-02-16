@@ -1,11 +1,13 @@
 import "./globals.css";
+import { AuthProvider } from "./context/AuthContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
 import { Toaster } from "react-hot-toast";
 import { Analytics } from "@vercel/analytics/next";
 
 export const metadata = {
-  title: "SmartBiz SaaS",
+  title: "SmartBiz SL",
 };
 
 export default function RootLayout({ children }) {
