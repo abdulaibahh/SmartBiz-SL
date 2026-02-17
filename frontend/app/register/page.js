@@ -6,23 +6,33 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
-export default function Login() {
-  const { login } = useAuth();
+export default function Register() {
+  const { register } = useAuth();
   const router = useRouter();
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm] = useState({ 
+    name: "", 
+    email: "", 
+    password: "",
+    business_name: ""
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setSuccess("");
     setLoading(true);
 
-    const result = await login(form);
+    const result = await register(form);
     
     if (result.success) {
-      router.push("/");
+      setSuccess(result.message);
+      setTimeout(() => {
+        router.push("/login");
+      }, 2000);
     } else {
       setError(result.message);
     }
@@ -44,17 +54,51 @@ export default function Login() {
             <span className="text-white font-bold text-2xl">SB</span>
           </div>
           <h1 className="text-3xl font-bold text-white">SmartBiz</h1>
-          <p className="text-zinc-500 mt-2">Sign in to your account</p>
+          <p className="text-zinc-500 mt-2">Create your business account</p>
         </div>
 
-        {/* Login Form */}
+        {/* Register Form */}
         <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 rounded-2xl p-8">
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                 {error}
               </div>
             )}
+
+            {success && (
+              <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
+                {success}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-2">
+                Your Name
+              </label>
+              <input
+                type="text"
+                placeholder="John Doe"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                required
+                className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-2">
+                Business Name
+              </label>
+              <input
+                type="text"
+                placeholder="My Business"
+                value={form.business_name}
+                onChange={(e) => setForm({ ...form, business_name: e.target.value })}
+                required
+                className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+              />
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-2">
@@ -81,6 +125,7 @@ export default function Login() {
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   required
+                  minLength={6}
                   className="w-full px-4 py-3 pr-12 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
                 />
                 <button
@@ -101,28 +146,28 @@ export default function Login() {
               {loading ? (
                 <>
                   <Loader2 size={20} className="animate-spin" />
-                  Signing in...
+                  Creating account...
                 </>
               ) : (
-                "Sign In"
+                "Create Account"
               )}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-zinc-500">
-              Don't have an account?{" "}
-              <Link href="/register" className="text-indigo-400 hover:text-indigo-300 font-medium">
-                Create one
+              Already have an account?{" "}
+              <Link href="/login" className="text-indigo-400 hover:text-indigo-300 font-medium">
+                Sign in
               </Link>
             </p>
           </div>
         </div>
 
-        {/* Demo Credentials */}
+        {/* Trial Info */}
         <div className="mt-6 p-4 rounded-xl bg-zinc-900/50 border border-zinc-800">
           <p className="text-xs text-zinc-500 text-center">
-            Demo: Register a new account to get started
+            Start with a 30-day free trial. No credit card required.
           </p>
         </div>
       </div>
