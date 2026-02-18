@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "https://smartbiz-sl-oy4l.onrender.com",
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
   headers: {
     "Content-Type": "application/json",
   },
@@ -48,19 +48,7 @@ export const salesAPI = {
 // ==================== INVENTORY ====================
 export const inventoryAPI = {
   supplierOrder: (data) => API.post("/api/inventory/supplier-order", data),
-  getAll: () => {
-    if (typeof window !== "undefined") {
-      const data = localStorage.getItem("inventory");
-      return Promise.resolve({ data: data ? JSON.parse(data) : [] });
-    }
-    return Promise.resolve({ data: [] });
-  },
-  save: (items) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("inventory", JSON.stringify(items));
-    }
-    return Promise.resolve({ data: { message: "Saved" } });
-  },
+  getAll: () => API.get("/api/inventory/all"),
 };
 
 // ==================== DEBT ====================
