@@ -177,4 +177,102 @@ router.delete("/users/:id", auth, roleAuth("owner"), async (req, res) => {
   }
 });
 
+/* ================= PASSWORD RESET ================= */
+
+// Request password reset
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    // Check if user exists
+    const user = await db.query(
+      "SELECT id, name FROM users WHERE email=$1",
+      [email]
+    );
+
+    if (!user.rows.length) {
+      // Don't reveal if email exists or not
+      return res.json({ message: "If the email exists, a reset link will be sent" });
+    }
+
+    // Generate reset token
+    const crypto = require("crypto");
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Save token to database
+    await db.query(
+      "INSERT INTO password_reset_tokens(user_id, token, expires_at) VALUES($1, $2, $3)",
+      [user.rows[0].id, resetToken, expiresAt]
+    );
+
+    // In production, send email with reset link
+    // For now, return the token (demo mode)
+    const resetLink = `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password?token=${resetToken}`;
+    
+    console.log("Password reset link:", resetLink);
+    
+    res.json({ 
+      message: "If the email exists, a reset link will be sent",
+      demoLink: resetLink // Only in development
+    });
+
+  } catch (err) {
+    console.error("Forgot password error:", err);
+    res.status(500).json({ message: "Failed to process request" });
+  }
+});
+
+// Reset password with token
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ message: "Token and password are required" });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    // Find valid token
+    const tokenResult = await db.query(
+      "SELECT * FROM password_reset_tokens WHERE token=$1 AND used=false AND expires_at > NOW()",
+      [token]
+    );
+
+    if (!tokenResult.rows.length) {
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
+
+    const resetRecord = tokenResult.rows[0];
+
+    // Hash new password
+    const hashed = await bcrypt.hash(password, 10);
+
+    // Update user password
+    await db.query(
+      "UPDATE users SET password=$1, updated_at=NOW() WHERE id=$2",
+      [hashed, resetRecord.user_id]
+    );
+
+    // Mark token as used
+    await db.query(
+      "UPDATE password_reset_tokens SET used=true WHERE id=$1",
+      [resetRecord.id]
+    );
+
+    res.json({ message: "Password reset successful" });
+
+  } catch (err) {
+    console.error("Reset password error:", err);
+    res.status(500).json({ message: "Failed to reset password" });
+  }
+});
+
 module.exports = router;
