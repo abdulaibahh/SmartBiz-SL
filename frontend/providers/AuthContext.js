@@ -1,34 +1,78 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { api } from "@/services/api";
+import { authAPI } from "@/services/api";
+import { useRouter } from "next/navigation";
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (token) setUser({ token });
+    const storedUser = localStorage.getItem("user");
+    if (token) {
+      setUser(storedUser ? JSON.parse(storedUser) : { token });
+    }
     setLoading(false);
   }, []);
 
   const login = async (credentials) => {
-    const res = await api.login(credentials);
-    localStorage.setItem("token", res.token);
-    setUser(res.user);
+    try {
+      const { data } = await authAPI.login(credentials);
+      localStorage.setItem("token", data.token);
+      
+      // Decode JWT to get user info
+      const payload = JSON.parse(atob(data.token.split(".")[1]));
+      const userData = {
+        id: payload.id,
+        role: payload.role,
+        business_id: payload.business_id,
+      };
+      
+      localStorage.setItem("user", JSON.stringify(userData));
+      setUser(userData);
+      
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        message: error.response?.data?.message || "Login failed" 
+      };
+    }
+  };
+
+  const register = async (data) => {
+    try {
+      await authAPI.register(data);
+      return { success: true, message: "Registration successful! Please login." };
+    } catch (error) {
+      return { 
+        success: false, 
+        message: error.response?.data?.message || "Registration failed" 
+      };
+    }
   };
 
   const logout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setUser(null);
-    window.location.href = "/login";
+    router.push("/login");
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      login, 
+      logout, 
+      register, 
+      isAuthenticated: !!user, 
+      loading 
+    }}>
       {children}
     </AuthContext.Provider>
   );
