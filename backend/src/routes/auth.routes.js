@@ -2,6 +2,7 @@ const router = require("express").Router();
 const db = require("../config/db");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const auth = require("../middlewares/auth");
 const roleAuth = require("../middlewares/role");
 
 /* ================= REGISTER BUSINESS OWNER ================= */
