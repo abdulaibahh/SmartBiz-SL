@@ -23,6 +23,7 @@ function SalesContent() {
   const [form, setForm] = useState({
     selectedCustomer: null,
     customerName: "",
+    paid: "",
     sendEmail: false,
     customerEmail: ""
   });

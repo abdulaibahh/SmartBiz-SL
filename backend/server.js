@@ -20,11 +20,15 @@ app.use(rateLimit({
   max: 100
 }));
 
-/* Stripe webhook BEFORE json */
-app.use("/api/subscription", require("./src/routes/subscription.routes"));
+/* Stripe webhook BEFORE json - mount only webhook route */
+const subscriptionRoutes = require("./src/routes/subscription.routes");
+app.use("/api/subscription/webhook", subscriptionRoutes);
 
 /* JSON parser */
 app.use(express.json());
+
+/* Mount rest of subscription routes after JSON parser */
+app.use("/api/subscription", subscriptionRoutes);
 
 /* ROUTES */
 app.get("/", (req, res) => res.send("🚀 SmartBiz API running"));
@@ -37,6 +41,7 @@ app.use("/api/debt", require("./src/routes/debt.routes"));
 app.use("/api/ai", require("./src/routes/ai.routes"));
 app.use("/api/platform", require("./src/routes/platform.routes"));
 app.use("/api/customers", require("./src/routes/customer.routes"));
+app.use("/api/orders", require("./src/routes/orders.routes"));
 
 /* ERROR HANDLER */
 app.use((err, req, res, next) => {

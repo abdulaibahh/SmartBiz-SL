@@ -53,6 +53,8 @@ export const authAPI = {
   getUsers: () => API.get("/api/auth/users"),
   createUser: (data) => API.post("/api/auth/users", data),
   deleteUser: (id) => API.delete(`/api/auth/users/${id}`),
+  forgotPassword: (email) => API.post("/api/auth/forgot-password", { email }),
+  resetPassword: (data) => API.post("/api/auth/reset-password", data),
 };
 
 // ==================== BUSINESS ====================
@@ -91,6 +93,10 @@ export const customerAPI = {
 // ==================== DEBT ====================
 export const debtAPI = {
   getAll: () => API.get("/api/debt/all"),
+  create: (data) => API.post("/api/debt", data),
+  recordPayment: (data) => API.post("/api/debt/payment", data),
+  getPayments: (debtId) => API.get(`/api/debt/payments/${debtId}`),
+  getSummary: () => API.get("/api/debt/summary"),
 };
 
 // ==================== AI ====================
@@ -113,6 +119,18 @@ export const subscriptionAPI = {
   getStatus: () => API.get("/api/subscription/status"),
   createCheckout: (plan) => API.post("/api/subscription/checkout", { plan }),
   submitOrangePayment: (data) => API.post("/api/subscription/orange-payment", data),
+  getPayments: () => API.get("/api/subscription/payments"),
+};
+
+// ==================== ORDERS ====================
+export const ordersAPI = {
+  getAll: () => API.get("/api/orders/all"),
+  getById: (id) => API.get(`/api/orders/${id}`),
+  create: (data) => API.post("/api/orders", data),
+  receive: (id, items) => API.put(`/api/orders/${id}/receive`, { items }),
+  delete: (id) => API.delete(`/api/orders/${id}`),
+  getPayments: (orderId) => API.get(`/api/orders/${orderId}/payments`),
+  recordPayment: (orderId, data) => API.post(`/api/orders/${orderId}/payment`, data),
 };
 
 // Default export for backward compatibility
@@ -125,6 +143,7 @@ export const api = {
   ai: aiAPI,
   platform: platformAPI,
   subscription: subscriptionAPI,
+  orders: ordersAPI,
 };
 
 export default API;

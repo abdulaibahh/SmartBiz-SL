@@ -14,7 +14,8 @@ import {
   Building2,
   UserPlus,
   ChevronRight,
-  LogOut
+  LogOut,
+  Truck
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -70,6 +71,7 @@ export default function Sidebar() {
         </div>
         
         <NavItem href="/inventory" icon={Package} label="Inventory" />
+        <NavItem href="/orders" icon={Truck} label="Supplier Orders" />
         <NavItem href="/customers" icon={Users} label="Customers" />
         <NavItem href="/debt" icon={CreditCard} label="Debt Tracking" />
         

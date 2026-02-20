@@ -193,3 +193,14 @@ ALTER TABLE debts ADD COLUMN IF NOT EXISTS payment_amount NUMERIC DEFAULT 0;
 ALTER TABLE debts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
 ALTER TABLE debts ADD COLUMN IF NOT EXISTS due_date DATE;
 
+-- Debt payments table to track individual payments
+
+CREATE TABLE IF NOT EXISTS debt_payments (
+  id SERIAL PRIMARY KEY,
+  debt_id INTEGER REFERENCES debts(id) ON DELETE CASCADE,
+  business_id INTEGER REFERENCES businesses(id),
+  amount NUMERIC NOT NULL,
+  notes TEXT,
+  payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

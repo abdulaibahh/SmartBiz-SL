@@ -33,25 +33,27 @@ router.post("/supplier-order", auth, sub, async (req, res) => {
 
     if (existing.rows.length) {
       // Update existing product - keep original prices unless explicitly provided
-      const updates = ["quantity = quantity + $1", "updated_at = NOW()"];
-      const params = [quantity];
-      let paramIndex = 2;
-      
-      if (cost_price !== undefined) {
-        updates.push(`cost_price = ${paramIndex++}`);
-        params.push(cost_price);
+      if (cost_price !== undefined && selling_price !== undefined) {
+        await db.query(
+          "UPDATE inventory SET quantity = quantity + $1, cost_price = $2, selling_price = $3, updated_at = NOW() WHERE business_id = $4 AND product = $5",
+          [quantity, cost_price, selling_price, req.user.business_id, product]
+        );
+      } else if (cost_price !== undefined) {
+        await db.query(
+          "UPDATE inventory SET quantity = quantity + $1, cost_price = $2, updated_at = NOW() WHERE business_id = $3 AND product = $4",
+          [quantity, cost_price, req.user.business_id, product]
+        );
+      } else if (selling_price !== undefined) {
+        await db.query(
+          "UPDATE inventory SET quantity = quantity + $1, selling_price = $2, updated_at = NOW() WHERE business_id = $3 AND product = $4",
+          [quantity, selling_price, req.user.business_id, product]
+        );
+      } else {
+        await db.query(
+          "UPDATE inventory SET quantity = quantity + $1, updated_at = NOW() WHERE business_id = $2 AND product = $3",
+          [quantity, req.user.business_id, product]
+        );
       }
-      if (selling_price !== undefined) {
-        updates.push(`selling_price = ${paramIndex++}`);
-        params.push(selling_price);
-      }
-      
-      params.push(req.user.business_id, product);
-      
-      await db.query(
-        `UPDATE inventory SET ${updates.join(", ")} WHERE business_id=${paramIndex} AND product=${paramIndex + 1}`,
-        params
-      );
     } else {
       // Insert new product with prices
       await db.query(
@@ -90,13 +92,40 @@ router.put("/:id", auth, async (req, res) => {
       params.push(selling_price);
     }
     
-    updates.push("updated_at = NOW()");
-    params.push(id, req.user.business_id);
-
-    if (updates.length > 1) {
+    if (quantity !== undefined && cost_price !== undefined && selling_price !== undefined) {
       await db.query(
-        `UPDATE inventory SET ${updates.join(", ")} WHERE id = ${paramIndex} AND business_id = ${paramIndex + 1}`,
-        params
+        "UPDATE inventory SET quantity = $1, cost_price = $2, selling_price = $3, updated_at = NOW() WHERE id = $4 AND business_id = $5",
+        [quantity, cost_price, selling_price, id, req.user.business_id]
+      );
+    } else if (quantity !== undefined && cost_price !== undefined) {
+      await db.query(
+        "UPDATE inventory SET quantity = $1, cost_price = $2, updated_at = NOW() WHERE id = $3 AND business_id = $4",
+        [quantity, cost_price, id, req.user.business_id]
+      );
+    } else if (quantity !== undefined && selling_price !== undefined) {
+      await db.query(
+        "UPDATE inventory SET quantity = $1, selling_price = $2, updated_at = NOW() WHERE id = $3 AND business_id = $4",
+        [quantity, selling_price, id, req.user.business_id]
+      );
+    } else if (cost_price !== undefined && selling_price !== undefined) {
+      await db.query(
+        "UPDATE inventory SET cost_price = $1, selling_price = $2, updated_at = NOW() WHERE id = $3 AND business_id = $4",
+        [cost_price, selling_price, id, req.user.business_id]
+      );
+    } else if (quantity !== undefined) {
+      await db.query(
+        "UPDATE inventory SET quantity = $1, updated_at = NOW() WHERE id = $2 AND business_id = $3",
+        [quantity, id, req.user.business_id]
+      );
+    } else if (cost_price !== undefined) {
+      await db.query(
+        "UPDATE inventory SET cost_price = $1, updated_at = NOW() WHERE id = $2 AND business_id = $3",
+        [cost_price, id, req.user.business_id]
+      );
+    } else if (selling_price !== undefined) {
+      await db.query(
+        "UPDATE inventory SET selling_price = $1, updated_at = NOW() WHERE id = $2 AND business_id = $3",
+        [selling_price, id, req.user.business_id]
       );
     }
     

@@ -9,6 +9,7 @@ import { CreditCard, Check, Sparkles, Loader2, Calendar, Shield, Smartphone, Pho
 function SubscriptionContent() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [paymentHistory, setPaymentHistory] = useState([]);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [showOrangeModal, setShowOrangeModal] = useState(false);
   const [orangeForm, setOrangeForm] = useState({
@@ -23,9 +24,15 @@ function SubscriptionContent() {
       try {
         const res = await subscriptionAPI.getStatus();
         setStatus(res.data);
+        
+        // Fetch payment history
+        const historyRes = await subscriptionAPI.getPayments?.();
+        if (historyRes?.data?.payments) {
+          setPaymentHistory(historyRes.data.payments);
+        }
       } catch (error) {
-        // Demo mode - simulate active subscription
-        setStatus({ active: true, trialEnds: null, nextBilling: new Date(Date.now() + 30*24*60*60*1000) });
+        console.error("Subscription status error:", error);
+        setStatus({ active: false, daysRemaining: 0 });
       } finally {
         setLoading(false);
       }
@@ -55,11 +62,23 @@ function SubscriptionContent() {
     
     try {
       const res = await subscriptionAPI.submitOrangePayment(orangeForm);
-      toast.success(res.data?.message || "Payment submitted!");
-      setShowOrangeModal(false);
-      setOrangeForm({ transactionId: "", senderNumber: "", amount: 10 });
+      
+      if (res.data?.success) {
+        toast.success("Payment verified! Subscription activated for 30 days.");
+        setStatus({
+          active: true,
+          daysRemaining: 30,
+          endDate: res.data.subscription.endDate
+        });
+        setShowOrangeModal(false);
+        setOrangeForm({ transactionId: "", senderNumber: "", amount: 10 });
+      } else {
+        toast.error(res.data?.message || "Payment verification failed");
+      }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to submit payment");
+      const errorMsg = error.response?.data?.message || "Failed to submit payment";
+      const details = error.response?.data?.details;
+      toast.error(details ? `${errorMsg}: ${details}` : errorMsg);
     } finally {
       setSubmittingOrange(false);
     }
@@ -128,25 +147,41 @@ function SubscriptionContent() {
           <div className="flex items-center gap-3">
             <Calendar className="text-zinc-500" size={20} />
             <div>
-              <p className="text-xs text-zinc-500">Next Billing</p>
-              <p className="text-white font-medium">{status?.nextBilling ? formatDate(status.nextBilling) : "N/A"}</p>
+              <p className="text-xs text-zinc-500">Subscription Ends</p>
+              <p className="text-white font-medium">
+                {status?.endDate ? formatDate(status.endDate) : 
+                 status?.daysRemaining > 0 ? `${status.daysRemaining} days left` : "N/A"}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <Shield className="text-zinc-500" size={20} />
             <div>
-              <p className="text-xs text-zinc-500">Trial Ends</p>
-              <p className="text-white font-medium">{status?.trialEnds ? formatDate(status.trialEnds) : "N/A"}</p>
+              <p className="text-xs text-zinc-500">Days Remaining</p>
+              <p className={`font-medium ${status?.daysRemaining > 7 ? 'text-emerald-400' : status?.daysRemaining > 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                {status?.daysRemaining > 0 ? `${status.daysRemaining} days` : "Expired"}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Check className="text-emerald-400" size={20} />
+            <Check className={status?.active ? "text-emerald-400" : "text-red-400"} size={20} />
             <div>
               <p className="text-xs text-zinc-500">Status</p>
-              <p className="text-emerald-400 font-medium">{status?.active ? "Active" : "Inactive"}</p>
+              <p className={`font-medium ${status?.active ? "text-emerald-400" : "text-red-400"}`}>
+                {status?.active ? "Active" : status?.expired ? "Expired" : "Inactive"}
+              </p>
             </div>
           </div>
         </div>
+        
+        {/* Expiry Warning */}
+        {status?.daysRemaining > 0 && status?.daysRemaining <= 7 && (
+          <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+            <p className="text-amber-400 text-sm">
+              ⚠️ Your subscription expires in {status.daysRemaining} days. Renew now to avoid interruption.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Payment Methods */}

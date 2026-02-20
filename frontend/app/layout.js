@@ -1,5 +1,6 @@
 import "@/app/globals.css";
 import { AuthProvider } from "@/providers/AuthContext";
+import ToastProvider from "@/app/components/ToastProvider";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 
@@ -8,6 +9,7 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         <AuthProvider>
+          <ToastProvider />
           <div className="flex">
             <Sidebar />
             <main className="flex-1">

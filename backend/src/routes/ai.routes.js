@@ -349,35 +349,45 @@ router.post("/ask", auth, async (req, res) => {
 
 // Shared function to process AI questions
 async function processAIQuestion(business_id, question, res) {
-  // Get comprehensive business data
-  const [
-    salesData,
-    debtData,
-    inventoryData,
-    recentSales
-  ] = await Promise.all([
-    db.query(
-      `SELECT 
-        COALESCE(SUM(total), 0) as total_revenue,
-        COALESCE(SUM(paid), 0) as total_paid,
-        COUNT(*) as transaction_count,
-        MAX(created_at) as last_sale
-       FROM sales WHERE business_id=$1`,
-      [business_id]
-    ),
-    db.query(
-      `SELECT COALESCE(SUM(amount), 0) as total_debt FROM debts WHERE business_id=$1`,
-      [business_id]
-    ),
-    db.query(
-      `SELECT COUNT(*) as items, COALESCE(SUM(quantity), 0) as total_stock FROM inventory WHERE business_id=$1`,
-      [business_id]
-    ),
-    db.query(
-      `SELECT * FROM sales WHERE business_id=$1 ORDER BY created_at DESC LIMIT 50`,
-      [business_id]
-    )
-  ]);
+  console.log("Processing AI question:", { business_id, question });
+  
+  try {
+    // Get comprehensive business data
+    const [
+      salesData,
+      debtData,
+      inventoryData,
+      recentSales
+    ] = await Promise.all([
+      db.query(
+        `SELECT 
+          COALESCE(SUM(total), 0) as total_revenue,
+          COALESCE(SUM(paid), 0) as total_paid,
+          COUNT(*) as transaction_count,
+          MAX(created_at) as last_sale
+         FROM sales WHERE business_id=$1`,
+        [business_id]
+      ),
+      db.query(
+        `SELECT COALESCE(SUM(amount), 0) as total_debt FROM debts WHERE business_id=$1`,
+        [business_id]
+      ),
+      db.query(
+        `SELECT COUNT(*) as items, COALESCE(SUM(quantity), 0) as total_stock FROM inventory WHERE business_id=$1`,
+        [business_id]
+      ),
+      db.query(
+        `SELECT * FROM sales WHERE business_id=$1 ORDER BY created_at DESC LIMIT 50`,
+        [business_id]
+      )
+    ]);
+    
+    console.log("AI data fetched:", {
+      sales: salesData.rows[0],
+      debts: debtData.rows[0],
+      inventory: inventoryData.rows[0],
+      recentSalesCount: recentSales.rows.length
+    });
 
   const sales = salesData.rows[0];
   const debts = debtData.rows[0];
@@ -433,8 +443,10 @@ async function processAIQuestion(business_id, question, res) {
 
   // Check if OpenAI is configured for enhanced response
   const openaiInstance = getOpenAI();
+  console.log("OpenAI instance:", openaiInstance ? "Available" : "Not available");
   
   if (!openaiInstance) {
+    console.log("No OpenAI key configured, returning data-driven response");
     // Return data-driven response without AI
     const fallbackAnswer = dataAnswer || `I don't have specific data for "${question}". Try asking about:\n- Revenue or sales\n- Debts or credits\n- Inventory or stock\n- Top customers or products`;
     
@@ -463,17 +475,75 @@ Instructions:
 4. Don't make up data that isn't provided
 `;
 
-  const completion = await openaiInstance.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content: prompt }],
-    max_tokens: 500
-  });
-
-  res.json({ answer: completion.choices[0].message.content });
+  try {
+    const completion = await openaiInstance.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 500
+    });
+    
+    console.log("OpenAI response received");
+    return res.json({ answer: completion.choices[0].message.content });
+  } catch (openaiErr) {
+    console.error("OpenAI API error:", openaiErr.message);
+    // Fall back to data-driven response with better formatting
+    let fallbackAnswer = dataAnswer;
+    
+    if (!fallbackAnswer) {
+      // Build a comprehensive answer from the data
+      fallbackAnswer = `📊 **Business Summary:**\n\n`;
+      fallbackAnswer += `💰 Revenue: NLE ${parseFloat(sales.total_revenue).toLocaleString()} (${sales.transaction_count} transactions)\n`;
+      fallbackAnswer += `⚠️ Outstanding Debts: NLE ${parseFloat(debts.total_debt).toLocaleString()}\n`;
+      fallbackAnswer += `📦 Inventory: ${inventory.items} products (${inventory.total_stock} units)\n`;
+      
+      // Add customer analysis for "best customers" question
+      if (questionLower.includes("customer") || questionLower.includes("best")) {
+        const customerStats = {};
+        recentSales.rows.forEach(sale => {
+          const cust = sale.customer || "Walk-in";
+          if (!customerStats[cust]) {
+            customerStats[cust] = { total: 0, count: 0 };
+          }
+          customerStats[cust].total += parseFloat(sale.total);
+          customerStats[cust].count += 1;
+        });
+        
+        const topCustomers = Object.entries(customerStats)
+          .sort((a, b) => b[1].total - a[1].total)
+          .slice(0, 5);
+        
+        if (topCustomers.length > 0) {
+          fallbackAnswer += `\n🏆 **Top Customers:**\n`;
+          topCustomers.forEach(([name, stats], i) => {
+            fallbackAnswer += `${i + 1}. ${name}: NLE ${stats.total.toLocaleString()} (${stats.count} visits)\n`;
+          });
+        }
+      }
+    }
+    
+    // Add specific advice based on question type
+    if (questionLower.includes("growth") || questionLower.includes("improve") || questionLower.includes("tips")) {
+      fallbackAnswer += `\n💡 **Growth Tips:**\n`;
+      fallbackAnswer += `• Focus on collecting outstanding debts (NLE ${parseFloat(debts.total_debt).toLocaleString()} unpaid)\n`;
+      fallbackAnswer += `• Consider promotions to increase transaction frequency\n`;
+      fallbackAnswer += `• Monitor inventory levels to avoid stockouts\n`;
+    }
+    
+    return res.json({
+      answer: fallbackAnswer + "\n\n⚠️ AI enhancement unavailable (API quota exceeded). Showing data-driven insights instead."
+    });
+  }
+  
+  } catch (processErr) {
+    console.error("Error in processAIQuestion:", processErr);
+    return handleAIError(business_id, res);
+  }
 }
 
 // Shared error handler
 async function handleAIError(business_id, res) {
+  console.log("handleAIError called for business_id:", business_id);
+  
   // Try to get basic data for fallback response
   try {
     const [salesData, debtData, inventoryData] = await Promise.all([
@@ -486,6 +556,7 @@ async function handleAIError(business_id, res) {
     
     return res.json({ answer: fallbackAnswer });
   } catch (fallbackErr) {
+    console.error("Fallback error handler failed:", fallbackErr);
     return res.json({ 
       answer: "I apologize, but I encountered an error while processing your request. Please try again later." 
     });

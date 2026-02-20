@@ -94,6 +94,12 @@ router.put("/", auth, async (req, res) => {
   try {
     const { shop_name, address, phone, logo_url } = req.body;
     
+    console.log("Update business request:", {
+      body: req.body,
+      user: req.user,
+      business_id: req.user.business_id
+    });
+    
     const result = await db.query(
       `UPDATE businesses 
        SET shop_name = COALESCE($1, shop_name),
@@ -105,10 +111,17 @@ router.put("/", auth, async (req, res) => {
       [shop_name, address, phone, logo_url, req.user.business_id]
     );
     
+    console.log("Update result:", result.rows);
+    
+    if (result.rows.length === 0) {
+      console.log("No business found with ID:", req.user.business_id);
+      return res.status(404).json({ message: "Business not found" });
+    }
+    
     res.json({ message: "Business updated", business: result.rows[0] });
   } catch (err) {
     console.error("Update business error:", err);
-    res.status(500).json({ message: "Failed to update business" });
+    res.status(500).json({ message: "Failed to update business", error: err.message });
   }
 });
 

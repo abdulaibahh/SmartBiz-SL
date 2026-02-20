@@ -89,6 +89,13 @@ router.post("/payment", auth, async (req, res) => {
       status = "paid";
     }
     
+    // Record individual payment
+    await db.query(
+      "INSERT INTO debt_payments (debt_id, business_id, amount, notes, payment_date) VALUES ($1, $2, $3, $4, NOW())",
+      [debtId, req.user.business_id, paymentAmount, notes || null]
+    );
+    
+    // Update debt totals
     await db.query(
       "UPDATE debts SET payment_amount=$1, status=$2, updated_at=NOW() WHERE id=$3",
       [newPaid, status, debtId]
@@ -103,6 +110,71 @@ router.post("/payment", auth, async (req, res) => {
   } catch (err) {
     console.error("Debt payment error:", err);
     res.status(500).json({ message: "Failed to record payment" });
+  }
+});
+
+/* ================= GET DEBT PAYMENT HISTORY ================= */
+
+router.get("/payments/:debtId", auth, async (req, res) => {
+  try {
+    const { debtId } = req.params;
+    
+    // Verify debt belongs to this business
+    const debt = await db.query(
+      "SELECT * FROM debts WHERE id=$1 AND business_id=$2",
+      [debtId, req.user.business_id]
+    );
+    
+    if (!debt.rows.length) {
+      return res.status(404).json({ message: "Debt not found" });
+    }
+    
+    const payments = await db.query(
+      "SELECT * FROM debt_payments WHERE debt_id=$1 ORDER BY payment_date DESC",
+      [debtId]
+    );
+    
+    res.json(payments.rows);
+  } catch (err) {
+    console.error("Get debt payments error:", err);
+    res.status(500).json({ message: "Failed to fetch payment history" });
+  }
+});
+
+/* ================= CREATE NEW DEBT ================= */
+
+router.post("/", auth, async (req, res) => {
+  try {
+    const { customer_id, amount, description, due_date } = req.body;
+    
+    if (!customer_id || !amount) {
+      return res.status(400).json({ message: "Customer ID and amount are required" });
+    }
+    
+    // Verify customer exists and belongs to this business
+    const customer = await db.query(
+      "SELECT * FROM customers WHERE id=$1 AND business_id=$2",
+      [customer_id, req.user.business_id]
+    );
+    
+    if (!customer.rows.length) {
+      return res.status(404).json({ message: "Customer not found" });
+    }
+    
+    const result = await db.query(
+      `INSERT INTO debts (business_id, customer_id, amount, description, due_date, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, 'pending', NOW())
+       RETURNING *`,
+      [req.user.business_id, customer_id, amount, description || null, due_date || null]
+    );
+    
+    res.status(201).json({
+      message: "Debt recorded successfully",
+      debt: result.rows[0]
+    });
+  } catch (err) {
+    console.error("Create debt error:", err);
+    res.status(500).json({ message: "Failed to record debt" });
   }
 });
 

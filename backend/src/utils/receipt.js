@@ -1,7 +1,7 @@
 const PDFDocument = require("pdfkit");
 const db = require("../config/db");
 
-// Generate advanced receipt PDF
+// Generate professional receipt PDF
 async function generateReceiptPDF(saleId, businessId) {
   // Get sale details
   const saleResult = await db.query(
@@ -32,130 +32,287 @@ async function generateReceiptPDF(saleId, businessId) {
   return new Promise((resolve, reject) => {
     try {
       const chunks = [];
-      const doc = new PDFDocument({ margin: 50, size: 'A4' });
+      const doc = new PDFDocument({ margin: 40, size: 'A4' });
 
       doc.on("data", chunk => chunks.push(chunk));
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", reject);
 
       // Colors
-      const primaryColor = '#4F46E5';
-      const textColor = '#374151';
-      const lightGray = '#9CA3AF';
+      const primaryColor = '#1E40AF';
+      const secondaryColor = '#3B82F6';
+      const textColor = '#1F2937';
+      const lightGray = '#6B7280';
       const borderColor = '#E5E7EB';
+      const bgLight = '#F9FAFB';
 
-      // Header background
-      doc.rect(0, 0, doc.page.width, 120).fill('#4F46E5');
+      // Page width for calculations
+      const pageWidth = doc.page.width;
+      const contentWidth = pageWidth - 80;
+
+      // ========== HEADER SECTION ==========
+      const headerY = 40;
       
-      // Logo placeholder area
+      // Top border line
+      doc.moveTo(40, headerY).lineTo(pageWidth - 40, headerY).lineWidth(3).stroke(primaryColor);
+
+      // Business Logo/Initial
+      const logoSize = 50;
+      const logoX = 50;
+      const logoY = headerY + 15;
+      
       if (business.logo_url) {
         try {
-          doc.image(business.logo_url, 50, 35, { width: 50, height: 50 });
+          doc.image(business.logo_url, logoX, logoY, { width: logoSize, height: logoSize });
         } catch (e) {
-          // Skip if image fails
-          doc.circle(75, 60, 25).fill('#FFFFFF');
+          // Fallback to circle with initial
+          doc.circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2).fill(primaryColor);
+          doc.fontSize(20).fillColor('#FFFFFF').font('Helvetica-Bold');
+          doc.text(
+            (business.shop_name || business.name || 'S')[0].toUpperCase(),
+            logoX, logoY + 15, { width: logoSize, align: 'center' }
+          );
         }
       } else {
         // Business initial circle
-        doc.circle(75, 60, 25).fill('#FFFFFF');
-        doc.fontSize(24).fillColor(primaryColor).text(
+        doc.circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2).fill(primaryColor);
+        doc.fontSize(20).fillColor('#FFFFFF').font('Helvetica-Bold');
+        doc.text(
           (business.shop_name || business.name || 'S')[0].toUpperCase(),
-          60, 48, { width: 30, align: 'center' }
+          logoX, logoY + 15, { width: logoSize, align: 'center' }
         );
       }
 
-      // Business Name
-      doc.fontSize(22).fillColor('#FFFFFF').font('Helvetica-Bold');
-      doc.text(business.shop_name || business.name || 'SmartBiz', 140, 45);
+      // Business Details - Centered
+      const businessX = 120;
+      const businessY = headerY + 15;
       
-      // Business info
-      doc.fontSize(10).font('Helvetica').fillColor('#E0E7FF');
-      if (business.address) doc.text(business.address, 140, 70, { width: 250 });
-      if (business.phone) doc.text(`Tel: ${business.phone}`, 140, business.address ? 85 : 70);
+      doc.fontSize(20).fillColor(primaryColor).font('Helvetica-Bold');
+      doc.text(business.shop_name || business.name || 'SmartBiz', businessX, businessY);
+      
+      doc.fontSize(9).fillColor(lightGray).font('Helvetica');
+      let detailY = businessY + 25;
+      
+      if (business.address) {
+        doc.text(business.address, businessX, detailY);
+        detailY += 14;
+      }
+      if (business.phone) {
+        doc.text(`Phone: ${business.phone}`, businessX, detailY);
+        detailY += 14;
+      }
+      if (business.email) {
+        doc.text(`Email: ${business.email}`, businessX, detailY);
+      }
 
-      // Receipt title
-      doc.fontSize(10).fillColor('#FFFFFF').text('RECEIPT', doc.page.width - 100, 45);
-      doc.fontSize(28).font('Helvetica-Bold').text(`#${sale.id}`, doc.page.width - 100, 60);
+      // Receipt Info Box - Right Side
+      const infoBoxX = pageWidth - 200;
+      const infoBoxY = headerY + 15;
+      const infoBoxWidth = 160;
+      const infoBoxHeight = 70;
+      
+      doc.rect(infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight).fill(bgLight).stroke(borderColor);
+      
+      doc.fontSize(9).fillColor(lightGray).font('Helvetica');
+      doc.text('RECEIPT NO', infoBoxX + 10, infoBoxY + 10);
+      doc.fontSize(14).fillColor(primaryColor).font('Helvetica-Bold');
+      doc.text(`#${String(sale.id).padStart(6, '0')}`, infoBoxX + 10, infoBoxY + 22);
+      
+      doc.fontSize(9).fillColor(lightGray).font('Helvetica');
+      doc.text('DATE', infoBoxX + 10, infoBoxY + 42);
+      doc.fontSize(10).fillColor(textColor).font('Helvetica-Bold');
+      doc.text(new Date(sale.created_at).toLocaleDateString('en-GB'), infoBoxX + 10, infoBoxY + 54);
 
-      // Reset after header
-      doc.fillColor(textColor);
+      // ========== CUSTOMER & SALE INFO ==========
+      const customerY = headerY + 100;
       
-      // Date and Customer Info Box
-      const infoY = 140;
-      doc.rect(40, infoY, doc.page.width - 80, 60).fill('#F9FAFB').stroke(borderColor);
+      // Two column layout
+      const col1X = 40;
+      const col2X = pageWidth / 2;
       
-      doc.fontSize(10).font('Helvetica');
-      doc.fillColor(lightGray).text('DATE', 60, infoY + 12);
-      doc.fillColor(textColor).text(new Date(sale.created_at).toLocaleString(), 60, infoY + 25);
+      // Left Column - Bill To
+      doc.fontSize(10).fillColor(lightGray).font('Helvetica');
+      doc.text('BILL TO', col1X, customerY);
+      doc.moveTo(col1X, customerY + 12).lineTo(col1X + 80, customerY + 12).lineWidth(1).stroke(secondaryColor);
       
-      doc.fillColor(lightGray).text('CUSTOMER', 200, infoY + 12);
-      doc.fillColor(textColor).text(sale.customer || 'Walk-in Customer', 200, infoY + 25);
+      doc.fontSize(11).fillColor(textColor).font('Helvetica-Bold');
+      doc.text(sale.customer || 'Walk-in Customer', col1X, customerY + 18);
       
-      doc.fillColor(lightGray).text('STATUS', 400, infoY + 12);
+      // Right Column - Sale Details
+      doc.fontSize(10).fillColor(lightGray).font('Helvetica');
+      doc.text('SALE DETAILS', col2X, customerY);
+      doc.moveTo(col2X, customerY + 12).lineTo(col2X + 80, customerY + 12).lineWidth(1).stroke(secondaryColor);
+      
       const isPaid = parseFloat(sale.total) <= parseFloat(sale.paid || 0);
-      doc.fillColor(isPaid ? '#10B981' : '#F59E0B').text(isPaid ? 'PAID' : 'PARTIAL', 400, infoY + 25);
-
-      // Items Table Header
-      const tableY = 220;
-      doc.rect(40, tableY, doc.page.width - 80, 30).fill('#4F46E5');
+      const statusColor = isPaid ? '#059669' : '#D97706';
+      const statusText = isPaid ? 'PAID' : 'PARTIAL PAYMENT';
       
-      doc.fontSize(11).font('Helvetica-Bold').fillColor('#FFFFFF');
-      doc.text('ITEM', 55, tableY + 9);
-      doc.text('QTY', 300, tableY + 9, { width: 60, align: 'center' });
-      doc.text('PRICE', 370, tableY + 9, { width: 80, align: 'right' });
-      doc.text('TOTAL', 460, tableY + 9, { width: 80, align: 'right' });
-
-      // Items
-      let itemY = tableY + 35;
-      doc.fontSize(10).font('Helvetica').fillColor(textColor);
+      doc.fontSize(10).fillColor(textColor).font('Helvetica');
+      doc.text(`Status: `, col2X, customerY + 18);
+      doc.fillColor(statusColor).font('Helvetica-Bold');
+      doc.text(statusText, col2X + 35, customerY + 18);
       
-      const items = itemsResult.rows.length > 0 ? itemsResult.rows : [{ product_name: 'Item', quantity: 1, unit_price: sale.total, total: sale.total }];
+      doc.fillColor(textColor).font('Helvetica');
+      doc.text(`Time: ${new Date(sale.created_at).toLocaleTimeString()}`, col2X, customerY + 32);
+
+      // ========== ITEMS TABLE ==========
+      const tableY = customerY + 70;
+      const colWidths = {
+        item: contentWidth * 0.45,
+        qty: contentWidth * 0.15,
+        price: contentWidth * 0.20,
+        total: contentWidth * 0.20
+      };
+      
+      const colX = {
+        item: 40,
+        qty: 40 + colWidths.item,
+        price: 40 + colWidths.item + colWidths.qty,
+        total: 40 + colWidths.item + colWidths.qty + colWidths.price
+      };
+
+      // Table Header
+      doc.rect(40, tableY, contentWidth, 32).fill(primaryColor);
+      
+      doc.fontSize(10).fillColor('#FFFFFF').font('Helvetica-Bold');
+      doc.text('DESCRIPTION', colX.item + 8, tableY + 10);
+      doc.text('QTY', colX.qty + 8, tableY + 10, { width: colWidths.qty - 16, align: 'center' });
+      doc.text('UNIT PRICE', colX.price + 8, tableY + 10, { width: colWidths.price - 16, align: 'right' });
+      doc.text('AMOUNT', colX.total + 8, tableY + 10, { width: colWidths.total - 16, align: 'right' });
+
+      // Table Rows
+      let rowY = tableY + 32;
+      const rowHeight = 28;
+      
+      const items = itemsResult.rows.length > 0 ? itemsResult.rows : [{ 
+        product_name: 'Sale Item', 
+        quantity: 1, 
+        unit_price: sale.total, 
+        total: sale.total 
+      }];
       
       items.forEach((item, index) => {
-        const bgColor = index % 2 === 0 ? '#FFFFFF' : '#F9FAFB';
-        doc.rect(40, itemY, doc.page.width - 80, 25).fill(bgColor).stroke(borderColor);
+        const isEven = index % 2 === 0;
+        const bgColor = isEven ? '#FFFFFF' : bgLight;
         
-        doc.fillColor(textColor).text(item.product_name || 'Product', 55, itemY + 7, { width: 230 });
-        doc.fillColor(lightGray).text(item.quantity.toString(), 300, itemY + 7, { width: 60, align: 'center' });
-        doc.fillColor(textColor).text(`NLE ${parseFloat(item.unit_price).toFixed(2)}`, 370, itemY + 7, { width: 80, align: 'right' });
-        doc.fillColor(primaryColor).font('Helvetica-Bold').text(`NLE ${parseFloat(item.total).toFixed(2)}`, 460, itemY + 7, { width: 80, align: 'right' });
+        // Row background
+        doc.rect(40, rowY, contentWidth, rowHeight).fill(bgColor).stroke(borderColor);
         
-        doc.font('Helvetica').fillColor(textColor);
-        itemY += 25;
+        // Item name
+        doc.fontSize(10).fillColor(textColor).font('Helvetica');
+        doc.text(item.product_name || 'Product', colX.item + 8, rowY + 8, { 
+          width: colWidths.item - 16,
+          ellipsis: true
+        });
+        
+        // Quantity
+        doc.fillColor(lightGray).font('Helvetica');
+        doc.text(item.quantity.toString(), colX.qty + 8, rowY + 8, { 
+          width: colWidths.qty - 16, 
+          align: 'center' 
+        });
+        
+        // Unit Price
+        doc.fillColor(textColor).font('Helvetica');
+        doc.text(
+          `NLE ${parseFloat(item.unit_price).toFixed(2)}`, 
+          colX.price + 8, 
+          rowY + 8, 
+          { width: colWidths.price - 16, align: 'right' }
+        );
+        
+        // Total
+        doc.fillColor(primaryColor).font('Helvetica-Bold');
+        doc.text(
+          `NLE ${parseFloat(item.total).toFixed(2)}`, 
+          colX.total + 8, 
+          rowY + 8, 
+          { width: colWidths.total - 16, align: 'right' }
+        );
+        
+        rowY += rowHeight;
       });
 
-      // Totals Section
-      const totalsY = itemY + 20;
-      doc.rect(250, totalsY, doc.page.width - 290, 80).fill('#F9FAFB').stroke(borderColor);
-      
-      doc.fontSize(10).fillColor(lightGray);
-      doc.text('Subtotal', 270, totalsY + 12);
-      doc.text(`NLE ${parseFloat(sale.total).toFixed(2)}`, 460, totalsY + 12, { width: 70, align: 'right' });
-      
-      doc.text('Paid', 270, totalsY + 32);
-      doc.fillColor('#10B981').text(`NLE ${parseFloat(sale.paid || 0).toFixed(2)}`, 460, totalsY + 32, { width: 70, align: 'right' });
-      
-      doc.moveTo(265, totalsY + 45).lineTo(530, totalsY + 45).stroke(borderColor);
-      
-      doc.fontSize(12).font('Helvetica-Bold').fillColor(textColor);
-      doc.text('Balance Due', 270, totalsY + 52);
-      const balance = parseFloat(sale.total) - parseFloat(sale.paid || 0);
-      doc.fillColor(balance > 0 ? '#F59E0B' : '#10B981').text(
-        `NLE ${Math.abs(balance).toFixed(2)}`,
-        460, totalsY + 52, { width: 70, align: 'right' }
+      // Table bottom border
+      doc.moveTo(40, rowY).lineTo(pageWidth - 40, rowY).lineWidth(2).stroke(primaryColor);
+
+      // ========== TOTALS SECTION ==========
+      const totalsY = rowY + 20;
+      const totalsWidth = 240;
+      const totalsX = pageWidth - 40 - totalsWidth;
+
+      // Subtotal
+      doc.fontSize(10).fillColor(lightGray).font('Helvetica');
+      doc.text('Subtotal', totalsX, totalsY);
+      doc.fillColor(textColor).font('Helvetica');
+      doc.text(
+        `NLE ${parseFloat(sale.total).toFixed(2)}`, 
+        totalsX + 100, 
+        totalsY, 
+        { width: 140, align: 'right' }
       );
 
-      // Footer
-      const footerY = doc.page.height - 80;
-      doc.moveTo(50, footerY).lineTo(doc.page.width - 50, footerY).stroke(primaryColor);
-      
-      doc.fontSize(10).font('Helvetica').fillColor(lightGray);
-      doc.text('Thank you for your business!', 50, footerY + 15, { width: doc.page.width - 100, align: 'center' });
-      doc.text('Powered by SmartBiz-SL', 50, footerY + 30, { width: doc.page.width - 100, align: 'center' });
+      // Paid Amount
+      const paidY = totalsY + 20;
+      doc.fillColor(lightGray).font('Helvetica');
+      doc.text('Amount Paid', totalsX, paidY);
+      doc.fillColor('#059669').font('Helvetica-Bold');
+      doc.text(
+        `NLE ${parseFloat(sale.paid || 0).toFixed(2)}`, 
+        totalsX + 100, 
+        paidY, 
+        { width: 140, align: 'right' }
+      );
 
-      // QR Code placeholder
-      doc.rect(doc.page.width - 100, footerY + 5, 50, 50).stroke(borderColor);
-      doc.fontSize(8).fillColor(lightGray).text('Scan to verify', doc.page.width - 95, footerY + 58);
+      // Divider line
+      doc.moveTo(totalsX, paidY + 15).lineTo(totalsX + totalsWidth, paidY + 15).lineWidth(1).stroke(borderColor);
+
+      // Balance Due
+      const balanceY = paidY + 25;
+      const balance = parseFloat(sale.total) - parseFloat(sale.paid || 0);
+      const balanceColor = balance > 0 ? '#D97706' : '#059669';
+      const balanceLabel = balance > 0 ? 'Balance Due' : 'Change';
+
+      doc.fontSize(12).fillColor(textColor).font('Helvetica-Bold');
+      doc.text(balanceLabel, totalsX, balanceY);
+      doc.fillColor(balanceColor).font('Helvetica-Bold');
+      doc.text(
+        `NLE ${Math.abs(balance).toFixed(2)}`, 
+        totalsX + 100, 
+        balanceY, 
+        { width: 140, align: 'right' }
+      );
+
+      // ========== FOOTER ==========
+      const footerY = doc.page.height - 100;
+      
+      // Top border
+      doc.moveTo(40, footerY).lineTo(pageWidth - 40, footerY).lineWidth(1).stroke(borderColor);
+      
+      // Thank you message
+      doc.fontSize(11).fillColor(primaryColor).font('Helvetica-Bold');
+      doc.text('Thank you for your business!', 40, footerY + 15, { 
+        width: contentWidth, 
+        align: 'center' 
+      });
+      
+      // Terms
+      doc.fontSize(9).fillColor(lightGray).font('Helvetica');
+      doc.text(
+        'Goods sold are not returnable. Please keep this receipt for your records.',
+        40, 
+        footerY + 35, 
+        { width: contentWidth, align: 'center' }
+      );
+      
+      // Powered by
+      doc.fontSize(8).fillColor(lightGray).font('Helvetica');
+      doc.text(
+        'Powered by SmartBiz-SL | smartbizsl.vercel.app',
+        40, 
+        footerY + 55, 
+        { width: contentWidth, align: 'center' }
+      );
 
       doc.end();
     } catch (err) {

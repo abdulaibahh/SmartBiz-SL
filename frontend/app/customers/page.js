@@ -96,14 +96,17 @@ function CustomersContent() {
     try {
       setSelectedCustomer(customer);
       const res = await customerAPI.getHistory(customer.id);
-      setCustomerHistory(res.data || []);
+      // Ensure customerHistory is always an array
+      const historyData = res.data;
+      setCustomerHistory(Array.isArray(historyData) ? historyData : []);
       setShowHistoryModal(true);
     } catch (error) {
       console.error("Error fetching customer history:", error);
       notifyError("Failed to load customer history");
-
+      setCustomerHistory([]);
     }
   };
+
 
   const filteredCustomers = customers.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
