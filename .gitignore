@@ -18,3 +18,8 @@ Thumbs.db
 .blackboxcli/
 .smartbiz_sl_prompt.txt
 install.ps1.blackbox
+.blackbox/
+-p/
+IMPLEMENTATION_PLAN.md/
+install.ps1/
+TODO.md

@@ -10,7 +10,13 @@ const PORT = process.env.PORT || 5000;
 
 /* SECURITY */
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: [
+    "http://localhost:5000", 
+    "https://smart-biz-sl.vercel.app/" 
+  ],
+  credentials: true
+}));
 
 /* Static files for uploads */
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
