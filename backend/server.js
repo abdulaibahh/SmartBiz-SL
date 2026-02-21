@@ -39,6 +39,9 @@ app.get("/", (req, res) => res.send("🚀 SmartBiz API running"));
 // Test routes (no database)
 app.use("/api/test", require("./src/routes/test.routes"));
 
+// Database test route (creates its own connection)
+app.use("/api/db-test", require("./src/routes/db-test.routes"));
+
 // Database setup endpoint
 app.use("/api/db", require("./src/routes/db.routes"));
 
