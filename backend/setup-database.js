@@ -104,6 +104,8 @@ async function setupDatabase() {
         quantity INTEGER,
         retail_quantity INTEGER DEFAULT 0,
         wholesale_quantity INTEGER DEFAULT 0,
+        retail_cost_price NUMERIC DEFAULT 0,
+        wholesale_cost_price NUMERIC DEFAULT 0,
         cost_price NUMERIC DEFAULT 0,
         selling_price NUMERIC DEFAULT 0,
         retail_price NUMERIC DEFAULT 0,
@@ -118,6 +120,8 @@ async function setupDatabase() {
     try {
       await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS retail_quantity INTEGER DEFAULT 0`);
       await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS wholesale_quantity INTEGER DEFAULT 0`);
+      await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS retail_cost_price NUMERIC DEFAULT 0`);
+      await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS wholesale_cost_price NUMERIC DEFAULT 0`);
       await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS retail_price NUMERIC DEFAULT 0`);
       await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS wholesale_price NUMERIC DEFAULT 0`);
       console.log("✓ Inventory columns verified");

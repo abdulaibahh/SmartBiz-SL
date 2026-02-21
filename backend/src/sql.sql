@@ -266,3 +266,50 @@ UPDATE sales SET sale_type = 'retail' WHERE sale_type IS NULL OR sale_type = '';
 -- Done!
 SELECT 'Migration completed successfully!' as status;
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- Add retail and wholesale columns to inventory table
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS retail_quantity INTEGER DEFAULT 0;
+
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS wholesale_quantity INTEGER DEFAULT 0;
+
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS retail_cost_price NUMERIC DEFAULT 0;
+
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS wholesale_cost_price NUMERIC DEFAULT 0;
+
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS retail_price NUMERIC DEFAULT 0;
+
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS wholesale_price NUMERIC DEFAULT 0;
+
+-- Add sale_type and transaction_type columns to sales table
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS sale_type TEXT DEFAULT 'retail';
+
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS transaction_type TEXT DEFAULT 'cash';
+
+-- Copy existing quantity and selling_price to retail columns for existing data
+UPDATE inventory 
+SET retail_quantity = COALESCE(quantity, 0),
+    retail_cost_price = COALESCE(cost_price, 0),
+    retail_price = COALESCE(selling_price, 0)
+WHERE retail_quantity = 0 OR retail_quantity IS NULL;
+
+-- Set default sale_type for existing sales
+UPDATE sales SET sale_type = 'retail' WHERE sale_type IS NULL OR sale_type = '';
+

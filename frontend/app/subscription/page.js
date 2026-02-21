@@ -145,10 +145,12 @@ function SubscriptionContent() {
             <div>
               <h2 className="text-xl font-semibold text-white">Current Plan</h2>
               <p className="text-zinc-500">
-                {status?.active ? (
+                {status?.isTrial ? (
+                  <span className="text-amber-400">Trial Period</span>
+                ) : status?.active ? (
                   <span className="text-emerald-400">Active Subscription</span>
                 ) : (
-                  <span className="text-amber-400">Trial Period</span>
+                  <span className="text-red-400">No Active Subscription</span>
                 )}
               </p>
             </div>
@@ -164,10 +166,12 @@ function SubscriptionContent() {
           <div className="flex items-center gap-3">
             <Calendar className="text-zinc-500" size={20} />
             <div>
-              <p className="text-xs text-zinc-500">Subscription Ends</p>
+              <p className="text-xs text-zinc-500">
+                {status?.isTrial ? "Trial Ends" : "Subscription Ends"}
+              </p>
               <p className="text-white font-medium">
                 {status?.endDate ? formatDate(status.endDate) : 
-                 status?.daysRemaining > 0 ? `${status.daysRemaining} days left` : "N/A"}
+                 (status?.daysRemaining !== undefined && status?.daysRemaining > 0) ? `${status.daysRemaining} days left` : "N/A"}
               </p>
             </div>
           </div>
@@ -175,8 +179,8 @@ function SubscriptionContent() {
             <Shield className="text-zinc-500" size={20} />
             <div>
               <p className="text-xs text-zinc-500">Days Remaining</p>
-              <p className={`font-medium ${status?.daysRemaining > 7 ? 'text-emerald-400' : status?.daysRemaining > 0 ? 'text-amber-400' : 'text-red-400'}`}>
-                {status?.daysRemaining > 0 ? `${status.daysRemaining} days` : "Expired"}
+              <p className={`font-medium ${(status?.daysRemaining ?? 0) > 7 ? 'text-emerald-400' : (status?.daysRemaining ?? 0) > 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                {(status?.daysRemaining !== undefined && status?.daysRemaining > 0) ? `${status.daysRemaining} days` : "Expired"}
               </p>
             </div>
           </div>
@@ -185,7 +189,7 @@ function SubscriptionContent() {
             <div>
               <p className="text-xs text-zinc-500">Status</p>
               <p className={`font-medium ${status?.active ? "text-emerald-400" : "text-red-400"}`}>
-                {status?.active ? "Active" : status?.expired ? "Expired" : "Inactive"}
+                {status?.active ? (status?.isTrial ? "Trial Active" : "Active") : status?.expired ? "Expired" : "Inactive"}
               </p>
             </div>
           </div>

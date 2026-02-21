@@ -112,6 +112,7 @@ router.get("/status", auth, async (req, res) => {
       expired: status.expired || false,
       daysRemaining: status.daysRemaining || 0,
       endDate: status.endDate,
+      isTrial: status.isTrial || false,
       message: status.message || null
     });
   } catch (err) {
