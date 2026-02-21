@@ -313,3 +313,8 @@ WHERE retail_quantity = 0 OR retail_quantity IS NULL;
 -- Set default sale_type for existing sales
 UPDATE sales SET sale_type = 'retail' WHERE sale_type IS NULL OR sale_type = '';
 
+
+
+UPDATE businesses
+SET trial_end = NOW() + INTERVAL '30 days'
+WHERE trial_end IS NULL;
