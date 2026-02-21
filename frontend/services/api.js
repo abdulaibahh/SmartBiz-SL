@@ -86,8 +86,10 @@ export const salesAPI = {
 // ==================== INVENTORY ====================
 export const inventoryAPI = {
   supplierOrder: (data) => API.post("/api/inventory/supplier-order", data),
+  addRetail: (data) => API.post("/api/inventory/retail", data),
+  addWholesale: (data) => API.post("/api/inventory/wholesale", data),
   getAll: () => API.get("/api/inventory/all"),
-  updateQuantity: (id, data) => API.put(`/api/inventory/${id}`, typeof data === 'number' ? { quantity: data } : data),
+  updateQuantity: (id, data) => API.put(`/api/inventory/${id}`, typeof data === 'number' ? { retail_quantity: data } : data),
   deleteItem: (id) => API.delete(`/api/inventory/${id}`),
 };
 

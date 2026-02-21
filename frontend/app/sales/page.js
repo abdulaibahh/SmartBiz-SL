@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { 
   Receipt, Loader2, ShoppingCart, User, DollarSign, 
-  Plus, Minus, Trash2, Search, Package, X
+  Plus, Minus, Trash2, Search, Package, X, Store, Building2
 } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
 
@@ -19,6 +19,7 @@ function SalesContent() {
   const [searchProduct, setSearchProduct] = useState("");
   const [searchCustomer, setSearchCustomer] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [saleType, setSaleType] = useState("retail"); // 'retail' or 'wholesale'
   
   const [form, setForm] = useState({
     selectedCustomer: null,
@@ -47,16 +48,40 @@ function SalesContent() {
     }
   };
 
-  // Filter available inventory (items with stock)
+  // Filter available inventory based on sale type
   const availableProducts = useMemo(() => {
-    let items = inventory.filter(i => i.quantity > 0);
+    let items = inventory.filter(i => {
+      if (saleType === 'retail') {
+        return (i.retail_quantity || 0) > 0;
+      } else {
+        return (i.wholesale_quantity || 0) > 0;
+      }
+    });
     if (searchProduct) {
       items = items.filter(i => 
         i.product.toLowerCase().includes(searchProduct.toLowerCase())
       );
     }
     return items;
-  }, [inventory, searchProduct]);
+  }, [inventory, searchProduct, saleType]);
+
+  // Get price based on sale type
+  const getPrice = (product) => {
+    if (saleType === 'retail') {
+      return product.retail_price || product.selling_price || 0;
+    } else {
+      return product.wholesale_price || product.selling_price || 0;
+    }
+  };
+
+  // Get available stock based on sale type
+  const getAvailableStock = (product) => {
+    if (saleType === 'retail') {
+      return product.retail_quantity || 0;
+    } else {
+      return product.wholesale_quantity || 0;
+    }
+  };
 
   // Filter customers
   const filteredCustomers = useMemo(() => {
@@ -69,23 +94,25 @@ function SalesContent() {
   // Add item to cart
   const addToCart = (product) => {
     const existingItem = cart.find(item => item.productId === product.id);
+    const availableStock = getAvailableStock(product);
+    
     if (existingItem) {
-      if (existingItem.quantity < product.quantity) {
+      if (existingItem.quantity < availableStock) {
         setCart(cart.map(item => 
           item.productId === product.id 
             ? { ...item, quantity: item.quantity + 1 }
             : item
         ));
       } else {
-        toast.error("Not enough stock available");
+        toast.error(`Not enough ${saleType} stock available`);
       }
     } else {
       setCart([...cart, {
         productId: product.id,
         product: product.product,
         quantity: 1,
-        unitPrice: product.selling_price || 0,
-        availableStock: product.quantity
+        unitPrice: getPrice(product),
+        availableStock: availableStock
       }]);
     }
     setSearchProduct("");
@@ -104,7 +131,7 @@ function SalesContent() {
         i.productId === productId ? { ...i, quantity: newQty } : i
       ));
     } else {
-      toast.error("Not enough stock available");
+      toast.error(`Not enough ${saleType} stock available`);
     }
   };
 
@@ -153,12 +180,13 @@ function SalesContent() {
         customer: form.customerName || "Walk-in Customer",
         customerId: form.selectedCustomer?.id,
         sendEmail: form.sendEmail,
-        customerEmail: form.customerEmail
+        customerEmail: form.customerEmail,
+        sale_type: saleType
       };
 
       const res = await salesAPI.createSale(saleData);
 
-      toast.success("Sale recorded successfully!");
+      toast.success(`${saleType === 'retail' ? 'Retail' : 'Wholesale'} sale recorded successfully!`);
       
       // Reset form
       setCart([]);
@@ -194,6 +222,38 @@ function SalesContent() {
         </div>
       </div>
 
+      {/* Sale Type Selector */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => {
+            setSaleType('retail');
+            setCart([]);
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-colors ${
+            saleType === 'retail' 
+              ? 'bg-emerald-600 text-white' 
+              : 'bg-zinc-800 text-zinc-400 hover:text-white'
+          }`}
+        >
+          <Store size={18} />
+          Retail Sale
+        </button>
+        <button
+          onClick={() => {
+            setSaleType('wholesale');
+            setCart([]);
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-colors ${
+            saleType === 'wholesale' 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-zinc-800 text-zinc-400 hover:text-white'
+          }`}
+        >
+          <Building2 size={18} />
+          Wholesale Sale
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Product Selection */}
         <div className="lg:col-span-2 space-y-4">
@@ -203,7 +263,7 @@ function SalesContent() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={20} />
               <input
                 type="text"
-                placeholder="Search products..."
+                placeholder={`Search ${saleType} products...`}
                 value={searchProduct}
                 onChange={(e) => setSearchProduct(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
@@ -222,10 +282,14 @@ function SalesContent() {
                     >
                       <div>
                         <p className="text-white font-medium">{product.product}</p>
-                        <p className="text-sm text-zinc-500">Stock: {product.quantity}</p>
+                        <p className="text-sm text-zinc-500">
+                          Stock: {getAvailableStock(product)} ({saleType})
+                        </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-emerald-400 font-medium">{formatCurrency(product.selling_price || 0)}</p>
+                        <p className={`font-medium ${saleType === 'retail' ? 'text-emerald-400' : 'text-blue-400'}`}>
+                          {formatCurrency(getPrice(product))}
+                        </p>
                         <p className="text-xs text-zinc-500">per unit</p>
                       </div>
                     </button>
@@ -326,6 +390,14 @@ function SalesContent() {
 
           {/* Payment Summary */}
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4">
+            <div className={`text-sm font-medium mb-3 px-3 py-2 rounded-lg ${
+              saleType === 'retail' 
+                ? 'bg-emerald-500/20 text-emerald-400' 
+                : 'bg-blue-500/20 text-blue-400'
+            }`}>
+              {saleType === 'retail' ? 'Retail Sale' : 'Wholesale Sale'}
+            </div>
+            
             <h3 className="text-lg font-semibold text-white mb-4">Payment</h3>
             
             <div className="space-y-3 mb-4">
@@ -382,7 +454,11 @@ function SalesContent() {
             <button
               onClick={handleSubmit}
               disabled={loading || cart.length === 0}
-              className="w-full py-4 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium hover:from-indigo-500 hover:to-purple-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className={`w-full py-4 rounded-xl text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+                saleType === 'retail' 
+                  ? 'bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500' 
+                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500'
+              }`}
             >
               {loading ? (
                 <>
@@ -392,7 +468,7 @@ function SalesContent() {
               ) : (
                 <>
                   <Receipt size={20} />
-                  Complete Sale - {formatCurrency(cartTotal)}
+                  Complete {saleType === 'retail' ? 'Retail' : 'Wholesale'} Sale - {formatCurrency(cartTotal)}
                 </>
               )}
             </button>

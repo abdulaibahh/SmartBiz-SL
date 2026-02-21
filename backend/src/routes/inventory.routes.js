@@ -22,13 +22,93 @@ router.get("/all", auth, async (req, res) => {
   }
 });
 
-// Supplier order - add stock
+// Add retail stock
+router.post("/retail", auth, sub, async (req, res) => {
+  const { product, quantity, cost_price, retail_price } = req.body;
+
+  if (!product || !quantity) {
+    return res.status(400).json({ message: "Product and quantity required" });
+  }
+
+  try {
+    const existing = await db.query(
+      "SELECT * FROM inventory WHERE business_id=$1 AND product=$2",
+      [req.user.business_id, product]
+    );
+
+    if (existing.rows.length) {
+      if (retail_price !== undefined) {
+        await db.query(
+          "UPDATE inventory SET retail_quantity = COALESCE(retail_quantity, 0) + $1, retail_price = $2, cost_price = COALESCE(cost_price, $2), updated_at = NOW() WHERE business_id = $3 AND product = $4",
+          [quantity, retail_price, req.user.business_id, product]
+        );
+      } else {
+        await db.query(
+          "UPDATE inventory SET retail_quantity = COALESCE(retail_quantity, 0) + $1, updated_at = NOW() WHERE business_id = $2 AND product = $3",
+          [quantity, req.user.business_id, product]
+        );
+      }
+    } else {
+      await db.query(
+        "INSERT INTO inventory(business_id, product, retail_quantity, cost_price, retail_price, updated_at) VALUES($1, $2, $3, $4, $5, NOW())",
+        [req.user.business_id, product, quantity, cost_price || 0, retail_price || 0]
+      );
+    }
+
+    res.json({ message: "Retail stock added" });
+  } catch (err) {
+    console.error("[INVENTORY] Error:", err);
+    res.status(500).json({ message: "Failed to add retail stock" });
+  }
+});
+
+// Add wholesale stock
+router.post("/wholesale", auth, sub, async (req, res) => {
+  const { product, quantity, cost_price, wholesale_price } = req.body;
+
+  if (!product || !quantity) {
+    return res.status(400).json({ message: "Product and quantity required" });
+  }
+
+  try {
+    const existing = await db.query(
+      "SELECT * FROM inventory WHERE business_id=$1 AND product=$2",
+      [req.user.business_id, product]
+    );
+
+    if (existing.rows.length) {
+      if (wholesale_price !== undefined) {
+        await db.query(
+          "UPDATE inventory SET wholesale_quantity = COALESCE(wholesale_quantity, 0) + $1, wholesale_price = $2, cost_price = COALESCE(cost_price, $2), updated_at = NOW() WHERE business_id = $3 AND product = $4",
+          [quantity, wholesale_price, req.user.business_id, product]
+        );
+      } else {
+        await db.query(
+          "UPDATE inventory SET wholesale_quantity = COALESCE(wholesale_quantity, 0) + $1, updated_at = NOW() WHERE business_id = $2 AND product = $3",
+          [quantity, req.user.business_id, product]
+        );
+      }
+    } else {
+      await db.query(
+        "INSERT INTO inventory(business_id, product, wholesale_quantity, cost_price, wholesale_price, updated_at) VALUES($1, $2, $3, $4, $5, NOW())",
+        [req.user.business_id, product, quantity, cost_price || 0, wholesale_price || 0]
+      );
+    }
+
+    res.json({ message: "Wholesale stock added" });
+  } catch (err) {
+    console.error("[INVENTORY] Error:", err);
+    res.status(500).json({ message: "Failed to add wholesale stock" });
+  }
+});
+
+// Supplier order - add stock (legacy support with stock_type)
 router.post("/supplier-order", auth, sub, async (req, res) => {
   console.log("[INVENTORY] POST /supplier-order - Request received");
   console.log("[INVENTORY] Body:", req.body);
   console.log("[INVENTORY] User:", req.user);
   
-  const { product, quantity, cost_price, selling_price } = req.body;
+  const { product, quantity, cost_price, selling_price, stock_type } = req.body;
 
   if (!product || !quantity) {
     console.log("[INVENTORY] Missing product or quantity");
@@ -43,36 +123,58 @@ router.post("/supplier-order", auth, sub, async (req, res) => {
     );
     console.log("[INVENTORY] Existing product:", existing.rows.length > 0 ? "Found" : "Not found");
 
+    // Determine stock type: retail, wholesale, or both
+    const isRetail = stock_type === 'retail' || stock_type === 'both' || !stock_type;
+    const isWholesale = stock_type === 'wholesale' || stock_type === 'both';
+
     if (existing.rows.length) {
       console.log("[INVENTORY] Updating existing product");
-      // Update existing product - keep original prices unless explicitly provided
-      if (cost_price !== undefined && selling_price !== undefined) {
-        await db.query(
-          "UPDATE inventory SET quantity = quantity + $1, cost_price = $2, selling_price = $3, updated_at = NOW() WHERE business_id = $4 AND product = $5",
-          [quantity, cost_price, selling_price, req.user.business_id, product]
-        );
-      } else if (cost_price !== undefined) {
-        await db.query(
-          "UPDATE inventory SET quantity = quantity + $1, cost_price = $2, updated_at = NOW() WHERE business_id = $3 AND product = $4",
-          [quantity, cost_price, req.user.business_id, product]
-        );
-      } else if (selling_price !== undefined) {
-        await db.query(
-          "UPDATE inventory SET quantity = quantity + $1, selling_price = $2, updated_at = NOW() WHERE business_id = $3 AND product = $4",
-          [quantity, selling_price, req.user.business_id, product]
-        );
-      } else {
-        await db.query(
-          "UPDATE inventory SET quantity = quantity + $1, updated_at = NOW() WHERE business_id = $2 AND product = $3",
-          [quantity, req.user.business_id, product]
-        );
+      
+      // Build update query based on stock type
+      let updateQuery = "UPDATE inventory SET ";
+      const updates = [];
+      const params = [];
+      let paramIndex = 1;
+
+      if (isRetail) {
+        updates.push(`retail_quantity = COALESCE(retail_quantity, 0) + $${paramIndex++}`);
+        params.push(quantity);
       }
+      if (isWholesale) {
+        updates.push(`wholesale_quantity = COALESCE(wholesale_quantity, 0) + $${paramIndex++}`);
+        params.push(quantity);
+      }
+      if (cost_price !== undefined) {
+        updates.push(`cost_price = $${paramIndex++}`);
+        params.push(cost_price);
+      }
+      if (selling_price !== undefined) {
+        if (isRetail) {
+          updates.push(`retail_price = $${paramIndex++}`);
+          params.push(selling_price);
+        }
+        if (isWholesale) {
+          updates.push(`wholesale_price = $${paramIndex++}`);
+          params.push(selling_price);
+        }
+      }
+      updates.push(`updated_at = NOW()`);
+      
+      updateQuery += updates.join(", ") + ` WHERE business_id = $${paramIndex++} AND product = $${paramIndex}`;
+      params.push(req.user.business_id, product);
+      
+      await db.query(updateQuery, params);
     } else {
       console.log("[INVENTORY] Inserting new product");
-      // Insert new product with prices
+      
+      const retailQty = isRetail ? quantity : 0;
+      const wholesaleQty = isWholesale ? quantity : 0;
+      const retailPrice = selling_price || 0;
+      const wholesalePrice = selling_price || 0;
+      
       await db.query(
-        "INSERT INTO inventory(business_id, product, quantity, cost_price, selling_price, updated_at) VALUES($1, $2, $3, $4, $5, NOW())",
-        [req.user.business_id, product, quantity, cost_price || 0, selling_price || 0]
+        "INSERT INTO inventory(business_id, product, retail_quantity, wholesale_quantity, cost_price, retail_price, wholesale_price, updated_at) VALUES($1, $2, $3, $4, $5, $6, $7, NOW())",
+        [req.user.business_id, product, retailQty, wholesaleQty, cost_price || 0, retailPrice, wholesalePrice]
       );
     }
 
@@ -87,60 +189,48 @@ router.post("/supplier-order", auth, sub, async (req, res) => {
 // Update inventory quantity and prices
 router.put("/:id", auth, async (req, res) => {
   const { id } = req.params;
-  const { quantity, cost_price, selling_price } = req.body;
+  const { quantity, cost_price, selling_price, retail_quantity, wholesale_quantity, retail_price, wholesale_price } = req.body;
 
   try {
     const updates = [];
     const params = [];
     let paramIndex = 1;
 
-    if (quantity !== undefined) {
-      updates.push(`quantity = ${paramIndex++}`);
-      params.push(quantity);
+    if (retail_quantity !== undefined) {
+      updates.push(`retail_quantity = $${paramIndex++}`);
+      params.push(retail_quantity);
+    }
+    if (wholesale_quantity !== undefined) {
+      updates.push(`wholesale_quantity = $${paramIndex++}`);
+      params.push(wholesale_quantity);
     }
     if (cost_price !== undefined) {
-      updates.push(`cost_price = ${paramIndex++}`);
+      updates.push(`cost_price = $${paramIndex++}`);
       params.push(cost_price);
     }
+    if (retail_price !== undefined) {
+      updates.push(`retail_price = $${paramIndex++}`);
+      params.push(retail_price);
+    }
+    if (wholesale_price !== undefined) {
+      updates.push(`wholesale_price = $${paramIndex++}`);
+      params.push(wholesale_price);
+    }
     if (selling_price !== undefined) {
-      updates.push(`selling_price = ${paramIndex++}`);
+      // Backward compatibility - set both prices
+      updates.push(`retail_price = $${paramIndex++}`);
+      params.push(selling_price);
+      updates.push(`wholesale_price = $${paramIndex++}`);
       params.push(selling_price);
     }
     
-    if (quantity !== undefined && cost_price !== undefined && selling_price !== undefined) {
+    if (updates.length > 0) {
+      updates.push(`updated_at = NOW()`);
+      params.push(id, req.user.business_id);
+      
       await db.query(
-        "UPDATE inventory SET quantity = $1, cost_price = $2, selling_price = $3, updated_at = NOW() WHERE id = $4 AND business_id = $5",
-        [quantity, cost_price, selling_price, id, req.user.business_id]
-      );
-    } else if (quantity !== undefined && cost_price !== undefined) {
-      await db.query(
-        "UPDATE inventory SET quantity = $1, cost_price = $2, updated_at = NOW() WHERE id = $3 AND business_id = $4",
-        [quantity, cost_price, id, req.user.business_id]
-      );
-    } else if (quantity !== undefined && selling_price !== undefined) {
-      await db.query(
-        "UPDATE inventory SET quantity = $1, selling_price = $2, updated_at = NOW() WHERE id = $3 AND business_id = $4",
-        [quantity, selling_price, id, req.user.business_id]
-      );
-    } else if (cost_price !== undefined && selling_price !== undefined) {
-      await db.query(
-        "UPDATE inventory SET cost_price = $1, selling_price = $2, updated_at = NOW() WHERE id = $3 AND business_id = $4",
-        [cost_price, selling_price, id, req.user.business_id]
-      );
-    } else if (quantity !== undefined) {
-      await db.query(
-        "UPDATE inventory SET quantity = $1, updated_at = NOW() WHERE id = $2 AND business_id = $3",
-        [quantity, id, req.user.business_id]
-      );
-    } else if (cost_price !== undefined) {
-      await db.query(
-        "UPDATE inventory SET cost_price = $1, updated_at = NOW() WHERE id = $2 AND business_id = $3",
-        [cost_price, id, req.user.business_id]
-      );
-    } else if (selling_price !== undefined) {
-      await db.query(
-        "UPDATE inventory SET selling_price = $1, updated_at = NOW() WHERE id = $2 AND business_id = $3",
-        [selling_price, id, req.user.business_id]
+        `UPDATE inventory SET ${updates.join(", ")} WHERE id = $${paramIndex++} AND business_id = $${paramIndex}`,
+        params
       );
     }
     

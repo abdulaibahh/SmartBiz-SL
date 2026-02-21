@@ -9,11 +9,14 @@ const { sendReceiptEmail } = require("../utils/email");
 
 router.post("/sale", auth, sub, async (req, res) => {
   try {
-    const { items, paid, customer, customerId, sendEmail, customerEmail } = req.body;
+    const { items, paid, customer, customerId, sendEmail, customerEmail, sale_type } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "At least one item is required" });
     }
+
+    // Determine sale type (default to retail)
+    const saleType = sale_type || 'retail';
 
     // Calculate total from items
     let totalAmount = 0;
@@ -39,10 +42,10 @@ router.post("/sale", auth, sub, async (req, res) => {
     const debt = Math.max(0, totalAmount - paidAmount);
     const customerName = customer || "Walk-in Customer";
 
-    // Insert sale
+    // Insert sale with sale_type
     const sale = await db.query(
-      "INSERT INTO sales(business_id, total, paid, customer) VALUES($1, $2, $3, $4) RETURNING id, created_at",
-      [req.user.business_id, totalAmount, paidAmount, customerName]
+      "INSERT INTO sales(business_id, total, paid, customer, sale_type) VALUES($1, $2, $3, $4, $5) RETURNING id, created_at",
+      [req.user.business_id, totalAmount, paidAmount, customerName, saleType]
     );
 
     const saleId = sale.rows[0].id;
@@ -56,13 +59,22 @@ router.post("/sale", auth, sub, async (req, res) => {
       );
     }
 
-    // Update inventory quantities
+    // Update inventory quantities based on sale_type
     for (const item of saleItems) {
       if (item.productId) {
-        await db.query(
-          "UPDATE inventory SET quantity = quantity - $1 WHERE id = $2 AND business_id = $3",
-          [item.quantity, item.productId, req.user.business_id]
-        );
+        if (saleType === 'retail') {
+          // Decrease retail stock
+          await db.query(
+            "UPDATE inventory SET retail_quantity = COALESCE(retail_quantity, 0) - $1 WHERE id = $2 AND business_id = $3",
+            [item.quantity, item.productId, req.user.business_id]
+          );
+        } else if (saleType === 'wholesale') {
+          // Decrease wholesale stock
+          await db.query(
+            "UPDATE inventory SET wholesale_quantity = COALESCE(wholesale_quantity, 0) - $1 WHERE id = $2 AND business_id = $3",
+            [item.quantity, item.productId, req.user.business_id]
+          );
+        }
       }
     }
 
@@ -101,6 +113,7 @@ router.post("/sale", auth, sub, async (req, res) => {
     res.json({ 
       message: "Sale recorded", 
       saleId,
+      saleType,
       receipt: pdfBase64 ? `data:application/pdf;base64,${pdfBase64}` : null
     });
   } catch (err) {
@@ -113,7 +126,7 @@ router.post("/sale", auth, sub, async (req, res) => {
 
 router.post("/quick", auth, sub, async (req, res) => {
   try {
-    const { total, paid, customer, sendEmail, customerEmail } = req.body;
+    const { total, paid, customer, sendEmail, customerEmail, sale_type } = req.body;
 
     if (!total) {
       return res.status(400).json({ message: "Total amount required" });
@@ -123,11 +136,12 @@ router.post("/quick", auth, sub, async (req, res) => {
     const paidAmount = parseFloat(paid) || 0;
     const debt = totalAmount - paidAmount;
     const customerName = customer || "Walk-in Customer";
+    const saleType = sale_type || 'retail';
 
     // Insert sale
     const sale = await db.query(
-      "INSERT INTO sales(business_id, total, paid, customer) VALUES($1, $2, $3, $4) RETURNING id, created_at",
-      [req.user.business_id, totalAmount, paidAmount, customerName]
+      "INSERT INTO sales(business_id, total, paid, customer, sale_type) VALUES($1, $2, $3, $4, $5) RETURNING id, created_at",
+      [req.user.business_id, totalAmount, paidAmount, customerName, saleType]
     );
 
     const saleId = sale.rows[0].id;
@@ -169,6 +183,7 @@ router.post("/quick", auth, sub, async (req, res) => {
     res.json({ 
       message: "Sale recorded", 
       saleId,
+      saleType,
       receipt: pdfBase64 ? `data:application/pdf;base64,${pdfBase64}` : null
     });
   } catch (err) {

@@ -4,7 +4,20 @@ const db = require("./src/config/db");
 async function setupDatabase() {
   console.log("Setting up database tables...");
   
+  // Debug: Check if DATABASE_URL is set
+  if (!process.env.DATABASE_URL) {
+    console.log("ERROR: DATABASE_URL is not set in .env file");
+    console.log("Please add this to your backend/.env file:");
+    console.log("DATABASE_URL=postgresql://smartbiz_4da2_user:wyih70vFtI4XQMcm4rKwiCIm1U98sNyR@dpg-d6cl9pdm5p6s73erpj70-a.frankfurt-postgres.render.com/smartbiz_4da2");
+    process.exit(1);
+  }
+  
   try {
+    // Test connection first
+    console.log("Testing database connection...");
+    const testResult = await db.query("SELECT NOW()");
+    console.log("✓ Database connected successfully");
+    
     // Create businesses table
     await db.query(`
       CREATE TABLE IF NOT EXISTS businesses (
@@ -89,13 +102,28 @@ async function setupDatabase() {
         business_id INTEGER,
         product TEXT,
         quantity INTEGER,
+        retail_quantity INTEGER DEFAULT 0,
+        wholesale_quantity INTEGER DEFAULT 0,
         cost_price NUMERIC DEFAULT 0,
         selling_price NUMERIC DEFAULT 0,
+        retail_price NUMERIC DEFAULT 0,
+        wholesale_price NUMERIC DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     console.log("✓ Inventory table ready");
+    
+    // Add new columns to existing inventory table
+    try {
+      await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS retail_quantity INTEGER DEFAULT 0`);
+      await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS wholesale_quantity INTEGER DEFAULT 0`);
+      await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS retail_price NUMERIC DEFAULT 0`);
+      await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS wholesale_price NUMERIC DEFAULT 0`);
+      console.log("✓ Inventory columns verified");
+    } catch (e) {
+      // Columns may already exist
+    }
     
     // Create sales table
     await db.query(`
@@ -107,7 +135,8 @@ async function setupDatabase() {
         total NUMERIC NOT NULL,
         paid NUMERIC DEFAULT 0,
         customer TEXT,
-        sale_type TEXT DEFAULT 'cash',
+        sale_type TEXT DEFAULT 'retail',
+        transaction_type TEXT DEFAULT 'cash',
         status TEXT DEFAULT 'completed',
         notes TEXT,
         receipt_sent BOOLEAN DEFAULT false,
@@ -116,6 +145,15 @@ async function setupDatabase() {
       )
     `);
     console.log("✓ Sales table ready");
+    
+    // Add new columns to existing sales table
+    try {
+      await db.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS sale_type TEXT DEFAULT 'retail'`);
+      await db.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS transaction_type TEXT DEFAULT 'cash'`);
+      console.log("✓ Sales columns verified");
+    } catch (e) {
+      // Columns may already exist
+    }
     
     // Create sales_items table
     await db.query(`

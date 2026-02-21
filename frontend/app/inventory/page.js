@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { inventoryAPI } from "@/services/api";
-import { Package, Search, Plus, Minus, Trash2, DollarSign, Edit2, X } from "lucide-react";
+import { Package, Search, Plus, Minus, Trash2, DollarSign, Edit2, X, Store, Building2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatCurrency } from "@/lib/currency";
 
@@ -14,8 +14,22 @@ function InventoryContent() {
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [newItem, setNewItem] = useState({ product: "", quantity: "", cost_price: "", selling_price: "" });
-  const [editForm, setEditForm] = useState({ product: "", quantity: "", cost_price: "", selling_price: "" });
+  const [stockType, setStockType] = useState("retail"); // 'retail' or 'wholesale'
+  const [newItem, setNewItem] = useState({ 
+    product: "", 
+    quantity: "", 
+    cost_price: "", 
+    retail_price: "",
+    wholesale_price: ""
+  });
+  const [editForm, setEditForm] = useState({ 
+    product: "", 
+    retail_quantity: "", 
+    wholesale_quantity: "",
+    cost_price: "", 
+    retail_price: "",
+    wholesale_price: ""
+  });
 
   useEffect(() => {
     loadInventory();
@@ -37,31 +51,70 @@ function InventoryContent() {
     if (!newItem.product.trim()) return;
 
     try {
-      await inventoryAPI.supplierOrder({
+      const data = {
         product: newItem.product,
         quantity: parseInt(newItem.quantity) || 1,
         cost_price: parseFloat(newItem.cost_price) || 0,
-        selling_price: parseFloat(newItem.selling_price) || 0
-      });
+        retail_price: parseFloat(newItem.retail_price) || 0,
+        wholesale_price: parseFloat(newItem.wholesale_price) || 0,
+        stock_type: stockType
+      };
+      
+      await inventoryAPI.supplierOrder(data);
       toast.success("Product added to inventory!");
       loadInventory();
     } catch (error) {
       toast.error("Failed to add product");
     }
-    setNewItem({ product: "", quantity: "", cost_price: "", selling_price: "" });
+    setNewItem({ product: "", quantity: "", cost_price: "", retail_price: "", wholesale_price: "" });
     setShowModal(false);
   };
 
-  const handleUpdateQuantity = async (id, delta) => {
+  const handleAddRetailStock = async (product, quantity) => {
+    try {
+      await inventoryAPI.addRetail({
+        product: product.product,
+        quantity: parseInt(quantity) || 1,
+        cost_price: product.cost_price || 0,
+        retail_price: product.retail_price || 0
+      });
+      toast.success("Retail stock added!");
+      loadInventory();
+    } catch (error) {
+      toast.error("Failed to add retail stock");
+    }
+  };
+
+  const handleAddWholesaleStock = async (product, quantity) => {
+    try {
+      await inventoryAPI.addWholesale({
+        product: product.product,
+        quantity: parseInt(quantity) || 1,
+        cost_price: product.cost_price || 0,
+        wholesale_price: product.wholesale_price || 0
+      });
+      toast.success("Wholesale stock added!");
+      loadInventory();
+    } catch (error) {
+      toast.error("Failed to add wholesale stock");
+    }
+  };
+
+  const handleUpdateQuantity = async (id, delta, type) => {
     const item = inventory.find(i => i.id === id);
     if (!item) return;
     
-    const newQuantity = Math.max(0, item.quantity + delta);
+    const currentQty = type === 'retail' ? item.retail_quantity : item.wholesale_quantity;
+    const newQuantity = Math.max(0, (currentQty || 0) + delta);
     
     try {
-      await inventoryAPI.updateQuantity(id, newQuantity);
+      const updateData = type === 'retail' 
+        ? { retail_quantity: newQuantity }
+        : { wholesale_quantity: newQuantity };
+      
+      await inventoryAPI.updateQuantity(id, updateData);
       setInventory(prev => prev.map(i => 
-        i.id === id ? { ...i, quantity: newQuantity } : i
+        i.id === id ? { ...i, [type === 'retail' ? 'retail_quantity' : 'wholesale_quantity']: newQuantity } : i
       ));
     } catch (error) {
       toast.error("Failed to update quantity");
@@ -84,9 +137,11 @@ function InventoryContent() {
     setEditingItem(item);
     setEditForm({
       product: item.product,
-      quantity: item.quantity,
+      retail_quantity: item.retail_quantity || 0,
+      wholesale_quantity: item.wholesale_quantity || 0,
       cost_price: item.cost_price || "",
-      selling_price: item.selling_price || ""
+      retail_price: item.retail_price || "",
+      wholesale_price: item.wholesale_price || ""
     });
     setShowEditModal(true);
   };
@@ -99,9 +154,11 @@ function InventoryContent() {
       await inventoryAPI.supplierOrder({
         id: editingItem.id,
         product: editForm.product,
-        quantity: parseInt(editForm.quantity) || 0,
+        quantity: (parseInt(editForm.retail_quantity) || 0) + (parseInt(editForm.wholesale_quantity) || 0),
         cost_price: parseFloat(editForm.cost_price) || 0,
-        selling_price: parseFloat(editForm.selling_price) || 0
+        retail_price: parseFloat(editForm.retail_price) || 0,
+        wholesale_price: parseFloat(editForm.wholesale_price) || 0,
+        stock_type: 'both'
       });
       toast.success("Product updated!");
       loadInventory();
@@ -119,7 +176,8 @@ function InventoryContent() {
     );
   }, [inventory, search]);
 
-  const totalItems = inventory.reduce((sum, i) => sum + i.quantity, 0);
+  const totalRetailItems = inventory.reduce((sum, i) => sum + (i.retail_quantity || 0), 0);
+  const totalWholesaleItems = inventory.reduce((sum, i) => sum + (i.wholesale_quantity || 0), 0);
 
   if (loading) {
     return (
@@ -135,7 +193,11 @@ function InventoryContent() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Inventory</h1>
-          <p className="text-zinc-500">{inventory.length} products, {totalItems} total units</p>
+          <p className="text-zinc-500">
+            {inventory.length} products | 
+            <span className="text-emerald-400 ml-2">Retail: {totalRetailItems}</span> | 
+            <span className="text-blue-400 ml-2">Wholesale: {totalWholesaleItems}</span>
+          </p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -143,6 +205,32 @@ function InventoryContent() {
         >
           <Plus size={20} />
           Add Product
+        </button>
+      </div>
+
+      {/* Stock Type Tabs */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setStockType('retail')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-colors ${
+            stockType === 'retail' 
+              ? 'bg-emerald-600 text-white' 
+              : 'bg-zinc-800 text-zinc-400 hover:text-white'
+          }`}
+        >
+          <Store size={18} />
+          Retail Stock
+        </button>
+        <button
+          onClick={() => setStockType('wholesale')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-colors ${
+            stockType === 'wholesale' 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-zinc-800 text-zinc-400 hover:text-white'
+          }`}
+        >
+          <Building2 size={18} />
+          Wholesale Stock
         </button>
       </div>
 
@@ -164,8 +252,10 @@ function InventoryContent() {
           {filtered.map((item) => (
             <div key={item.id} className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
               <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                  <Package className="text-purple-400" size={24} />
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                  stockType === 'retail' ? 'bg-emerald-500/20' : 'bg-blue-500/20'
+                }`}>
+                  <Package className={stockType === 'retail' ? 'text-emerald-400' : 'text-blue-400'} size={24} />
                 </div>
                 <div className="flex gap-1">
                   <button
@@ -184,27 +274,61 @@ function InventoryContent() {
               </div>
               
               <h3 className="text-lg font-semibold text-white mb-1">{item.product}</h3>
-              <p className="text-3xl font-bold text-indigo-400 mb-2">{item.quantity}</p>
-              {(item.selling_price > 0 || item.cost_price > 0) && (
+              
+              {/* Stock Display */}
+              <div className="mb-3 space-y-1">
+                <div className={`text-2xl font-bold ${stockType === 'retail' ? 'text-emerald-400' : 'text-blue-400'}`}>
+                  {stockType === 'retail' ? (item.retail_quantity || 0) : (item.wholesale_quantity || 0)}
+                </div>
+                <div className="flex gap-3 text-xs text-zinc-500">
+                  <span>Retail: {item.retail_quantity || 0}</span>
+                  <span>Wholesale: {item.wholesale_quantity || 0}</span>
+                </div>
+              </div>
+              
+              {/* Price Display */}
+              {(item.retail_price > 0 || item.wholesale_price > 0 || item.cost_price > 0) && (
                 <div className="text-sm text-zinc-400 mb-3 space-y-1">
                   {item.cost_price > 0 && (
                     <p>Cost: {formatCurrency(item.cost_price)}</p>
                   )}
-                  {item.selling_price > 0 && (
-                    <p className="text-green-400">Price: {formatCurrency(item.selling_price)}</p>
+                  {item.retail_price > 0 && (
+                    <p className="text-green-400">Retail Price: {formatCurrency(item.retail_price)}</p>
+                  )}
+                  {item.wholesale_price > 0 && (
+                    <p className="text-blue-400">Wholesale Price: {formatCurrency(item.wholesale_price)}</p>
                   )}
                 </div>
               )}
               
-              <div className="flex items-center gap-2">
+              {/* Quick Add Stock Buttons */}
+              <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={() => handleUpdateQuantity(item.id, -1)}
+                  onClick={() => handleAddRetailStock(item, 1)}
+                  className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors text-xs flex items-center justify-center gap-1"
+                >
+                  <Plus size={14} />
+                  Add Retail
+                </button>
+                <button
+                  onClick={() => handleAddWholesaleStock(item, 1)}
+                  className="p-2 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors text-xs flex items-center justify-center gap-1"
+                >
+                  <Plus size={14} />
+                  Add Wholesale
+                </button>
+              </div>
+              
+              {/* Quantity Controls */}
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => handleUpdateQuantity(item.id, -1, stockType)}
                   className="flex-1 p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors flex items-center justify-center"
                 >
                   <Minus size={18} />
                 </button>
                 <button
-                  onClick={() => handleUpdateQuantity(item.id, 1)}
+                  onClick={() => handleUpdateQuantity(item.id, 1, stockType)}
                   className="flex-1 p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors flex items-center justify-center"
                 >
                   <Plus size={18} />
@@ -254,7 +378,7 @@ function InventoryContent() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Cost Price (Optional)</label>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">Cost Price</label>
                 <input
                   type="number"
                   min="0"
@@ -266,14 +390,26 @@ function InventoryContent() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Selling Price (Optional)</label>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">Retail Price</label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   placeholder="0.00"
-                  value={newItem.selling_price}
-                  onChange={(e) => setNewItem({ ...newItem, selling_price: e.target.value })}
+                  value={newItem.retail_price}
+                  onChange={(e) => setNewItem({ ...newItem, retail_price: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">Wholesale Price</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={newItem.wholesale_price}
+                  onChange={(e) => setNewItem({ ...newItem, wholesale_price: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                 />
               </div>
@@ -322,15 +458,27 @@ function InventoryContent() {
                   className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Quantity</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={editForm.quantity}
-                  onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Retail Quantity</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editForm.retail_quantity}
+                    onChange={(e) => setEditForm({ ...editForm, retail_quantity: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Wholesale Quantity</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editForm.wholesale_quantity}
+                    onChange={(e) => setEditForm({ ...editForm, wholesale_quantity: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-400 mb-2">Cost Price</label>
@@ -345,14 +493,26 @@ function InventoryContent() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Selling Price</label>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">Retail Price</label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   placeholder="0.00"
-                  value={editForm.selling_price}
-                  onChange={(e) => setEditForm({ ...editForm, selling_price: e.target.value })}
+                  value={editForm.retail_price}
+                  onChange={(e) => setEditForm({ ...editForm, retail_price: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">Wholesale Price</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={editForm.wholesale_price}
+                  onChange={(e) => setEditForm({ ...editForm, wholesale_price: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                 />
               </div>
