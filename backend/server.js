@@ -36,6 +36,9 @@ app.use("/api/subscription", subscriptionRoutes);
 /* ROUTES */
 app.get("/", (req, res) => res.send("🚀 SmartBiz API running"));
 
+// Database setup endpoint
+app.use("/api/db", require("./src/routes/db.routes"));
+
 app.use("/api/auth", require("./src/routes/auth.routes"));
 app.use("/api/business", require("./src/routes/business.routes"));
 app.use("/api/sales", require("./src/routes/sales.routes"));
