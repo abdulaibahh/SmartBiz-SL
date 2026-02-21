@@ -15,7 +15,6 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Check if user already exists
     const existingUser = await db.query(
       "SELECT id FROM users WHERE email=$1",
       [email]
@@ -27,7 +26,6 @@ router.post("/register", async (req, res) => {
 
     const hashed = await bcrypt.hash(password, 10);
 
-    // Create business
     const business = await db.query(
       "INSERT INTO businesses(name, subscription_active, trial_end) VALUES($1, false, NOW() + interval '30 days') RETURNING id",
       [business_name]
@@ -35,7 +33,6 @@ router.post("/register", async (req, res) => {
 
     const business_id = business.rows[0].id;
 
-    // Create owner user
     await db.query(
       "INSERT INTO users(name, email, password, role, business_id) VALUES($1, $2, $3, 'owner', $4)",
       [name, email, hashed, business_id]
@@ -88,7 +85,36 @@ router.post("/login", async (req, res) => {
 
   } catch (err) {
     console.error("Login error:", err);
-    res.status(500).json({ message: "Login failed" });
+    if (err.message && err.message.includes("relation")) {
+      return res.status(500).json({ message: "Database tables not set up" });
+    }
+    res.status(500).json({ message: "Login failed: " + err.message });
+  }
+});
+
+/* ================= CREATE TEST USER ================= */
+router.post("/create-demo", async (req, res) => {
+  try {
+    const existing = await db.query("SELECT id FROM users WHERE email=$1", ["smartbiz@shop.com"]);
+    if (existing.rows.length) {
+      return res.json({ message: "Demo user exists" });
+    }
+    
+    const business = await db.query(
+      "INSERT INTO businesses(name, subscription_active, trial_end) VALUES($1, true, NOW() + interval '30 days') RETURNING id",
+      ["Demo Business"]
+    );
+    
+    const hashed = await bcrypt.hash("password123", 10);
+    await db.query(
+      "INSERT INTO users(name, email, password, role, business_id) VALUES($1, $2, $3, $4, $5)",
+      ["Demo User", "smartbiz@shop.com", hashed, "owner", business.rows[0].id]
+    );
+    
+    res.json({ message: "Demo user created" });
+  } catch (err) {
+    console.error("Create demo error:", err);
+    res.status(500).json({ message: "Failed to create demo" });
   }
 });
 
@@ -117,13 +143,11 @@ router.post("/users", auth, roleAuth("owner"), async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Validate role
     const allowedRoles = ["cashier", "manager"];
     if (!allowedRoles.includes(role)) {
       return res.status(400).json({ message: "Invalid role" });
     }
 
-    // Check if email already exists
     const existing = await db.query(
       "SELECT id FROM users WHERE email=$1",
       [email]
@@ -153,12 +177,10 @@ router.delete("/users/:id", auth, roleAuth("owner"), async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Prevent owner from deleting themselves
     if (parseInt(id) === req.user.id) {
       return res.status(400).json({ message: "Cannot delete your own account" });
     }
 
-    // Verify user belongs to same business
     const user = await db.query(
       "SELECT id FROM users WHERE id=$1 AND business_id=$2",
       [id, req.user.business_id]
@@ -179,7 +201,6 @@ router.delete("/users/:id", auth, roleAuth("owner"), async (req, res) => {
 
 /* ================= PASSWORD RESET ================= */
 
-// Request password reset
 router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
@@ -188,37 +209,31 @@ router.post("/forgot-password", async (req, res) => {
       return res.status(400).json({ message: "Email is required" });
     }
 
-    // Check if user exists
     const user = await db.query(
       "SELECT id, name FROM users WHERE email=$1",
       [email]
     );
 
     if (!user.rows.length) {
-      // Don't reveal if email exists or not
       return res.json({ message: "If the email exists, a reset link will be sent" });
     }
 
-    // Generate reset token
     const crypto = require("crypto");
     const resetToken = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
-    // Save token to database
     await db.query(
       "INSERT INTO password_reset_tokens(user_id, token, expires_at) VALUES($1, $2, $3)",
       [user.rows[0].id, resetToken, expiresAt]
     );
 
-    // In production, send email with reset link
-    // For now, return the token (demo mode)
     const resetLink = `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password?token=${resetToken}`;
     
     console.log("Password reset link:", resetLink);
     
     res.json({ 
       message: "If the email exists, a reset link will be sent",
-      demoLink: resetLink // Only in development
+      demoLink: resetLink
     });
 
   } catch (err) {
@@ -227,7 +242,6 @@ router.post("/forgot-password", async (req, res) => {
   }
 });
 
-// Reset password with token
 router.post("/reset-password", async (req, res) => {
   try {
     const { token, password } = req.body;
@@ -240,7 +254,6 @@ router.post("/reset-password", async (req, res) => {
       return res.status(400).json({ message: "Password must be at least 6 characters" });
     }
 
-    // Find valid token
     const tokenResult = await db.query(
       "SELECT * FROM password_reset_tokens WHERE token=$1 AND used=false AND expires_at > NOW()",
       [token]
@@ -252,16 +265,13 @@ router.post("/reset-password", async (req, res) => {
 
     const resetRecord = tokenResult.rows[0];
 
-    // Hash new password
     const hashed = await bcrypt.hash(password, 10);
 
-    // Update user password
     await db.query(
       "UPDATE users SET password=$1, updated_at=NOW() WHERE id=$2",
       [hashed, resetRecord.user_id]
     );
 
-    // Mark token as used
     await db.query(
       "UPDATE password_reset_tokens SET used=true WHERE id=$1",
       [resetRecord.id]
