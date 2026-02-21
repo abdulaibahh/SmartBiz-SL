@@ -8,9 +8,6 @@ const nextConfig = {
     // For production: Deploy backend to Render/Railway/Heroku and use that URL
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "https://smartbiz-sl-oy4l.onrender.com",
   },
-  turbopack: {
-    root: __dirname,
-  },
 };
 
 module.exports = nextConfig;
