@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { 
   Receipt, Loader2, ShoppingCart, User, DollarSign, 
-  Plus, Minus, Trash2, Search, Package, X, Store, Building2
+  Plus, Minus, Trash2, Search, Package, X, Store, Building2, Download
 } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
 
@@ -20,6 +20,8 @@ function SalesContent() {
   const [searchCustomer, setSearchCustomer] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [saleType, setSaleType] = useState("retail"); // 'retail' or 'wholesale'
+  const [lastReceipt, setLastReceipt] = useState(null);
+  const [lastSaleId, setLastSaleId] = useState(null);
   
   const [form, setForm] = useState({
     selectedCustomer: null,
@@ -185,22 +187,16 @@ function SalesContent() {
       };
 
       const res = await salesAPI.createSale(saleData);
-
+      
+      // Capture receipt and sale ID from response
+      if (res.data.receipt) {
+        setLastReceipt(res.data.receipt);
+        setLastSaleId(res.data.saleId);
+      }
+      
       toast.success(`${saleType === 'retail' ? 'Retail' : 'Wholesale'} sale recorded successfully!`);
       
-      // Reset form
-      setCart([]);
-      setForm({
-        selectedCustomer: null,
-        customerName: "",
-        paid: "",
-        sendEmail: false,
-        customerEmail: ""
-      });
-      
-      setTimeout(() => {
-        router.push("/sales/history");
-      }, 1000);
+      // Don't reset cart or redirect immediately - let user download receipt first
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to record sale");
     } finally {
@@ -208,10 +204,69 @@ function SalesContent() {
     }
   };
 
+  // Download receipt PDF
+  const downloadReceipt = () => {
+    if (!lastReceipt) return;
+    
+    const link = document.createElement('a');
+    link.href = lastReceipt;
+    link.download = `receipt-${lastSaleId || 'sale'}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Start new sale (clear receipt and cart)
+  const startNewSale = () => {
+    setLastReceipt(null);
+    setLastSaleId(null);
+    setCart([]);
+    setForm({
+      selectedCustomer: null,
+      customerName: "",
+      paid: "",
+      sendEmail: false,
+      customerEmail: ""
+    });
+  };
+
   const balance = Math.max(0, cartTotal - (parseFloat(form.paid) || 0));
 
   return (
     <div className="space-y-6">
+      {/* Receipt Download Success Message */}
+      {lastReceipt && (
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-6">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                <Receipt className="text-emerald-400" size={24} />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-white">Sale Recorded Successfully!</h2>
+                <p className="text-sm text-zinc-400">Receipt #{lastSaleId} is ready for download</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={downloadReceipt}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 transition-colors"
+              >
+                <Download size={18} />
+                Download Receipt
+              </button>
+              <button
+                onClick={startNewSale}
+                className="flex items-center gap-2 px-4 py-2 bg-zinc-800 text-white rounded-xl hover:bg-zinc-700 transition-colors"
+              >
+                <Plus size={18} />
+                New Sale
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-3 mb-6">
         <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center">
           <ShoppingCart className="text-indigo-400" size={24} />
@@ -451,27 +506,33 @@ function SalesContent() {
             </div>
 
             {/* Submit Button */}
-            <button
-              onClick={handleSubmit}
-              disabled={loading || cart.length === 0}
-              className={`w-full py-4 rounded-xl text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
-                saleType === 'retail' 
-                  ? 'bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500' 
-                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500'
-              }`}
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Receipt size={20} />
-                  Complete {saleType === 'retail' ? 'Retail' : 'Wholesale'} Sale - {formatCurrency(cartTotal)}
-                </>
-              )}
-            </button>
+            {lastReceipt ? (
+              <div className="text-center py-4 text-zinc-400">
+                <p>Sale complete! Use the buttons above to download receipt or start a new sale.</p>
+              </div>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={loading || cart.length === 0}
+                className={`w-full py-4 rounded-xl text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+                  saleType === 'retail' 
+                    ? 'bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500' 
+                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500'
+                }`}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Receipt size={20} />
+                    Complete {saleType === 'retail' ? 'Retail' : 'Wholesale'} Sale - {formatCurrency(cartTotal)}
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>
