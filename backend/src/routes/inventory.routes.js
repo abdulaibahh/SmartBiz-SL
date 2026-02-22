@@ -226,52 +226,71 @@ router.put("/:id", auth, async (req, res) => {
   const { quantity, cost_price, selling_price, retail_quantity, wholesale_quantity, retail_price, wholesale_price } = req.body;
 
   try {
+    // First, ensure columns exist
+    try {
+      await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS retail_quantity INTEGER DEFAULT 0`);
+      await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS wholesale_quantity INTEGER DEFAULT 0`);
+      await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS retail_price NUMERIC DEFAULT 0`);
+      await db.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS wholesale_price NUMERIC DEFAULT 0`);
+    } catch (e) {
+      // Columns might already exist
+    }
+
     const updates = [];
     const params = [];
-    let paramIndex = 1;
 
     if (retail_quantity !== undefined) {
-      updates.push(`retail_quantity = $${paramIndex++}`);
+      updates.push(`retail_quantity = ${params.length + 1}`);
       params.push(retail_quantity);
     }
     if (wholesale_quantity !== undefined) {
-      updates.push(`wholesale_quantity = $${paramIndex++}`);
+      updates.push(`wholesale_quantity = ${params.length + 1}`);
       params.push(wholesale_quantity);
     }
     if (cost_price !== undefined) {
-      updates.push(`cost_price = $${paramIndex++}`);
+      updates.push(`cost_price = ${params.length + 1}`);
       params.push(cost_price);
     }
     if (retail_price !== undefined) {
-      updates.push(`retail_price = $${paramIndex++}`);
+      updates.push(`retail_price = ${params.length + 1}`);
       params.push(retail_price);
     }
     if (wholesale_price !== undefined) {
-      updates.push(`wholesale_price = $${paramIndex++}`);
+      updates.push(`wholesale_price = ${params.length + 1}`);
       params.push(wholesale_price);
     }
     if (selling_price !== undefined) {
       // Backward compatibility - set both prices
-      updates.push(`retail_price = $${paramIndex++}`);
+      updates.push(`retail_price = ${params.length + 1}`);
       params.push(selling_price);
-      updates.push(`wholesale_price = $${paramIndex++}`);
+      updates.push(`wholesale_price = ${params.length + 1}`);
       params.push(selling_price);
     }
     
     if (updates.length > 0) {
       updates.push(`updated_at = NOW()`);
+      
+      // Add id and business_id to params
+      const idParamIndex = params.length + 1;
+      const businessIdParamIndex = params.length + 2;
       params.push(id, req.user.business_id);
       
-      await db.query(
-        `UPDATE inventory SET ${updates.join(", ")} WHERE id = $${paramIndex++} AND business_id = $${paramIndex}`,
-        params
-      );
+      const query = `UPDATE inventory SET ${updates.join(", ")} WHERE id = ${idParamIndex} AND business_id = ${businessIdParamIndex}`;
+      
+      console.log("[UPDATE] Query:", query);
+      console.log("[UPDATE] Params:", params);
+      
+      const result = await db.query(query, params);
+      
+      if (result.rowCount === 0) {
+        return res.status(404).json({ message: "Item not found" });
+      }
     }
     
     res.json({ message: "Inventory updated" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Failed to update inventory" });
+    res.status(500).json({ message: "Failed to update inventory: " + err.message });
   }
 });
 
@@ -280,14 +299,19 @@ router.delete("/:id", auth, async (req, res) => {
   const { id } = req.params;
 
   try {
-    await db.query(
+    const result = await db.query(
       "DELETE FROM inventory WHERE id=$1 AND business_id=$2",
       [id, req.user.business_id]
     );
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Item not found" });
+    }
+    
     res.json({ message: "Item deleted" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Failed to delete item" });
+    res.status(500).json({ message: "Failed to delete item: " + err.message });
   }
 });
 
