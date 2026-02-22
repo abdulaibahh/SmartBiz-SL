@@ -42,17 +42,27 @@ async function activateSubscription(businessId, paymentMethod, paymentId) {
 // Helper function to check if subscription is expired
 async function checkAndUpdateSubscriptionStatus(businessId) {
   try {
+    console.log("Fetching subscription status for business:", businessId);
+    
     const result = await db.query(
       `SELECT subscription_active, subscription_end_date, trial_end
        FROM businesses WHERE id = $1`,
       [businessId]
     );
     
+    console.log("Database result rows:", result.rows.length);
+    console.log("Business data:", JSON.stringify(result.rows[0]));
+    
     if (!result.rows.length) return { active: false };
     
     const biz = result.rows[0];
     const now = new Date();
     let trialEnd = biz.trial_end ? new Date(biz.trial_end) : null;
+    
+    console.log("Current time:", now);
+    console.log("Trial end:", trialEnd);
+    console.log("Subscription active:", biz.subscription_active);
+    console.log("Subscription end date:", biz.subscription_end_date);
     
     // If no trial_end is set, create a 30-day trial automatically
     if (!trialEnd) {
@@ -125,7 +135,14 @@ async function checkAndUpdateSubscriptionStatus(businessId) {
 // Get subscription status
 router.get("/status", auth, async (req, res) => {
   try {
+    console.log("=== Subscription Status Debug ===");
+    console.log("User ID:", req.user.id);
+    console.log("Business ID:", req.user.business_id);
+    
     const status = await checkAndUpdateSubscriptionStatus(req.user.business_id);
+    
+    console.log("Status returned:", JSON.stringify(status));
+    console.log("=================================");
     
     res.json({
       active: status.active,

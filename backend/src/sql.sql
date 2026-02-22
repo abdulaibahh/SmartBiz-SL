@@ -11,6 +11,9 @@ CREATE TABLE businesses (
   logo_url TEXT,
   trial_end TIMESTAMP,
   subscription_active BOOLEAN DEFAULT false,
+  subscription_start_date TIMESTAMP,
+  subscription_end_date TIMESTAMP,
+  stripe_customer_id TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

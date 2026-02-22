@@ -22,7 +22,13 @@ function SubscriptionContent() {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
+        console.log("=== Frontend Debug ===");
+        console.log("Fetching subscription status...");
+        
         const res = await subscriptionAPI.getStatus();
+        console.log("API Response:", res);
+        console.log("Response data:", res.data);
+        
         setStatus(res.data);
         
         // Fetch payment history

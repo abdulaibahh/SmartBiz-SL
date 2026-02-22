@@ -30,3 +30,17 @@ WHERE retail_quantity = 0 OR retail_quantity IS NULL;
 
 -- Set default sale_type for existing sales
 UPDATE sales SET sale_type = 'retail' WHERE sale_type IS NULL OR sale_type = '';
+
+-- =============================================
+-- SUBSCRIPTION COLUMNS MIGRATION (Fix for 500 error)
+-- =============================================
+-- Add missing subscription columns to businesses table
+
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS subscription_start_date TIMESTAMP;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS subscription_end_date TIMESTAMP;
+
+-- Verify the columns were added
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'businesses' 
+AND column_name IN ('subscription_start_date', 'subscription_end_date', 'trial_end', 'subscription_active');
