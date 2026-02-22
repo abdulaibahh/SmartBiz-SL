@@ -125,4 +125,56 @@ router.put("/", auth, async (req, res) => {
   }
 });
 
+/* ================= DELETE BUSINESS ACCOUNT ================= */
+
+router.delete("/account", auth, async (req, res) => {
+  const business_id = req.user.business_id;
+  
+  try {
+    await db.query("BEGIN");
+    
+    // Delete all related data in the correct order (respecting foreign keys)
+    
+    // 1. Delete sales items first
+    await db.query(`
+      DELETE FROM sales_items 
+      WHERE sale_id IN (SELECT id FROM sales WHERE business_id = $1)
+    `, [business_id]);
+    
+    // 2. Delete sales
+    await db.query("DELETE FROM sales WHERE business_id = $1", [business_id]);
+    
+    // 3. Delete inventory
+    await db.query("DELETE FROM inventory WHERE business_id = $1", [business_id]);
+    
+    // 4. Delete customers
+    await db.query("DELETE FROM customers WHERE business_id = $1", [business_id]);
+    
+    // 5. Delete debts
+    await db.query("DELETE FROM debts WHERE business_id = $1", [business_id]);
+    
+    // 6. Delete orders
+    await db.query("DELETE FROM orders WHERE business_id = $1", [business_id]);
+    
+    // 7. Delete subscription payments
+    await db.query("DELETE FROM subscription_payments WHERE business_id = $1", [business_id]);
+    
+    // 8. Delete users (except the current user - will be deleted with business)
+    await db.query("DELETE FROM users WHERE business_id = $1", [business_id]);
+    
+    // 9. Delete the business
+    await db.query("DELETE FROM businesses WHERE id = $1", [business_id]);
+    
+    await db.query("COMMIT");
+    
+    console.log(`✅ Business account ${business_id} deleted successfully`);
+    
+    res.json({ message: "Account deleted successfully" });
+  } catch (err) {
+    await db.query("ROLLBACK");
+    console.error("Delete account error:", err);
+    res.status(500).json({ message: "Failed to delete account", error: err.message });
+  }
+});
+
 module.exports = router;

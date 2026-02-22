@@ -74,6 +74,7 @@ export const businessAPI = {
   get: () => API.get("/api/business"),
   update: (data) => API.put("/api/business", data),
   uploadLogo: (logo) => API.post("/api/business/logo", { logo }),
+  deleteAccount: () => API.delete("/api/business/account"),
 };
 
 // ==================== SALES ====================
