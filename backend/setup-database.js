@@ -89,11 +89,20 @@ async function setupDatabase() {
         phone TEXT,
         address TEXT,
         notes TEXT,
+        total_debt NUMERIC DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     console.log("✓ Customers table ready");
+    
+    // Add total_debt column if not exists
+    try {
+      await db.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS total_debt NUMERIC DEFAULT 0`);
+      console.log("✓ Customer total_debt column verified");
+    } catch (e) {
+      // Column may already exist
+    }
     
     // Create inventory table
     await db.query(`
@@ -199,7 +208,7 @@ async function setupDatabase() {
       await db.query(`ALTER TABLE debts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'`);
       await db.query(`ALTER TABLE debts ADD COLUMN IF NOT EXISTS description TEXT`);
       await db.query(`ALTER TABLE debts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
-    console.log("✓ Debts columns verified");
+      console.log("✓ Debts columns verified");
     } catch (e) {
       // Columns may already exist, ignore error
     }
