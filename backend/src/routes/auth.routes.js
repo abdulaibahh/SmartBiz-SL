@@ -199,6 +199,50 @@ router.delete("/users/:id", auth, roleAuth("owner"), async (req, res) => {
   }
 });
 
+/* ================= DELETE ACCOUNT (Owner + Business) ================= */
+
+router.delete("/account", auth, async (req, res) => {
+  const client = await db.connect();
+  
+  try {
+    await client.query("BEGIN");
+    
+    const businessId = req.user.business_id;
+    const ownerId = req.user.id;
+    
+    // Delete all related data in correct order
+    await client.query("DELETE FROM debt_payments WHERE debt_id IN (SELECT id FROM debts WHERE business_id=$1)", [businessId]);
+    await client.query("DELETE FROM debts WHERE business_id=$1", [businessId]);
+    
+    await client.query("DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE business_id=$1)", [businessId]);
+    await client.query("DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE business_id=$1)", [businessId]);
+    await client.query("DELETE FROM orders WHERE business_id=$1", [businessId]);
+    
+    await client.query("DELETE FROM sales WHERE business_id=$1", [businessId]);
+    
+    await client.query("DELETE FROM inventory WHERE business_id=$1", [businessId]);
+    
+    await client.query("DELETE FROM customers WHERE business_id=$1", [businessId]);
+    
+    // Delete all users of the business (including owner)
+    await client.query("DELETE FROM users WHERE business_id=$1", [businessId]);
+    
+    // Delete the business
+    await client.query("DELETE FROM businesses WHERE id=$1", [businessId]);
+    
+    await client.query("COMMIT");
+    
+    // Return success - client will handle logout
+    res.json({ message: "Account deleted successfully" });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Delete account error:", err);
+    res.status(500).json({ message: "Failed to delete account" });
+  } finally {
+    client.release();
+  }
+});
+
 /* ================= PASSWORD RESET ================= */
 
 router.post("/forgot-password", async (req, res) => {

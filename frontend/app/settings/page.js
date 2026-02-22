@@ -2,13 +2,16 @@
 
 import { useState, useEffect, useRef } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { businessAPI } from "@/services/api";
+import { businessAPI, authAPI } from "@/services/api";
 import toast from "react-hot-toast";
-import { Settings, User, Building2, Mail, Save, Loader2, Upload, Image } from "lucide-react";
+import { Settings, User, Building2, Mail, Save, Loader2, Upload, Image, AlertTriangle, X } from "lucide-react";
 
 function SettingsContent() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({
     shop_name: "",
     address: "",
@@ -90,6 +93,27 @@ function SettingsContent() {
     } catch (error) {
       toast.error("Failed to upload logo");
       setUploading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== "DELETE") {
+      toast.error('Type "DELETE" to confirm');
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await authAPI.deleteAccount();
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      toast.success("Account deleted successfully");
+      window.location.href = "/login";
+    } catch (error) {
+      toast.error("Failed to delete account");
+    } finally {
+      setDeleting(false);
+      setShowDeleteModal(false);
     }
   };
 
@@ -224,6 +248,94 @@ function SettingsContent() {
           </button>
         </form>
       </div>
+
+      {/* Delete Account Section */}
+      <div className="bg-zinc-900/80 border border-red-900/50 rounded-2xl p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 rounded-xl bg-red-900/30 flex items-center justify-center">
+            <AlertTriangle className="text-red-400" size={24} />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-white">Delete Account</h2>
+            <p className="text-sm text-zinc-500">Permanently delete your account and all business data</p>
+          </div>
+        </div>
+        <p className="text-sm text-zinc-400 mb-4">
+          This action cannot be undone. All your business data, including sales, inventory, customers, and orders will be permanently deleted.
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowDeleteModal(true)}
+          className="px-4 py-2 rounded-xl bg-red-600/20 text-red-400 border border-red-600/50 hover:bg-red-600/30 transition-colors"
+        >
+          Delete My Account
+        </button>
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-900/30 flex items-center justify-center">
+                  <AlertTriangle className="text-red-400" size={20} />
+                </div>
+                <h3 className="text-lg font-semibold text-white">Delete Account</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteConfirmText("");
+                }}
+                className="text-zinc-400 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-sm text-zinc-400 mb-4">
+              This will permanently delete your account and all business data. This action cannot be undone.
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-zinc-400 mb-2">
+                Type <span className="text-red-400 font-mono">DELETE</span> to confirm
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value.toUpperCase())}
+                placeholder="DELETE"
+                className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 font-mono uppercase"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteConfirmText("");
+                }}
+                className="flex-1 py-3 px-4 rounded-xl bg-zinc-800 text-white hover:bg-zinc-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirmText !== "DELETE" || deleting}
+                className="flex-1 py-3 px-4 rounded-xl bg-red-600 text-white hover:bg-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete Account"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
