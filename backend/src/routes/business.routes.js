@@ -135,34 +135,58 @@ router.delete("/account", auth, async (req, res) => {
     
     // Delete all related data in the correct order (respecting foreign keys)
     
-    // 1. Delete sales items first
-    await db.query(`
-      DELETE FROM sales_items 
-      WHERE sale_id IN (SELECT id FROM sales WHERE business_id = $1)
-    `, [business_id]);
+    // 1. Delete debt payments first (depends on debts)
+    await db.query(
+      "DELETE FROM debt_payments WHERE debt_id IN (SELECT id FROM debts WHERE business_id = $1)",
+      [business_id]
+    );
     
-    // 2. Delete sales
-    await db.query("DELETE FROM sales WHERE business_id = $1", [business_id]);
-    
-    // 3. Delete inventory
-    await db.query("DELETE FROM inventory WHERE business_id = $1", [business_id]);
-    
-    // 4. Delete customers
-    await db.query("DELETE FROM customers WHERE business_id = $1", [business_id]);
-    
-    // 5. Delete debts
+    // 2. Delete debts
     await db.query("DELETE FROM debts WHERE business_id = $1", [business_id]);
     
-    // 6. Delete orders
+    // 3. Delete sales items first (depends on sales)
+    await db.query(
+      "DELETE FROM sales_items WHERE sale_id IN (SELECT id FROM sales WHERE business_id = $1)",
+      [business_id]
+    );
+    
+    // 4. Delete sales
+    await db.query("DELETE FROM sales WHERE business_id = $1", [business_id]);
+    
+    // 5. Delete order items first (depends on orders)
+    await db.query(
+      "DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE business_id = $1)",
+      [business_id]
+    );
+    
+    // 6. Delete supplier payments first (depends on orders)
+    await db.query("DELETE FROM supplier_payments WHERE business_id = $1", [business_id]);
+    
+    // 7. Delete orders
     await db.query("DELETE FROM orders WHERE business_id = $1", [business_id]);
     
-    // 7. Delete subscription payments
+    // 8. Delete inventory
+    await db.query("DELETE FROM inventory WHERE business_id = $1", [business_id]);
+    
+    // 9. Delete customers
+    await db.query("DELETE FROM customers WHERE business_id = $1", [business_id]);
+    
+    // 10. Delete subscription payments
     await db.query("DELETE FROM subscription_payments WHERE business_id = $1", [business_id]);
     
-    // 8. Delete users (except the current user - will be deleted with business)
+    // 11. Delete subscriptions
+    await db.query("DELETE FROM subscriptions WHERE business_id = $1", [business_id]);
+    
+    // 12. Delete password reset tokens for all users of this business
+    await db.query(
+      "DELETE FROM password_reset_tokens WHERE user_id IN (SELECT id FROM users WHERE business_id = $1)",
+      [business_id]
+    );
+    
+    // 13. Delete all users of the business (including owner)
     await db.query("DELETE FROM users WHERE business_id = $1", [business_id]);
     
-    // 9. Delete the business
+    // 14. Delete the business
     await db.query("DELETE FROM businesses WHERE id = $1", [business_id]);
     
     await db.query("COMMIT");
@@ -173,7 +197,7 @@ router.delete("/account", auth, async (req, res) => {
   } catch (err) {
     await db.query("ROLLBACK");
     console.error("Delete account error:", err);
-    res.status(500).json({ message: "Failed to delete account", error: err.message });
+    res.status(500).json({ message: "Failed to delete account: " + err.message });
   }
 });
 
