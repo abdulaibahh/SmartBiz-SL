@@ -80,7 +80,11 @@ export default function Sidebar() {
         </div>
         
         <NavItem href="/inventory" icon={Package} label={t('sidebar.inventory')} />
-        <NavItem href="/orders" icon={Truck} label={t('sidebar.supplierOrders')} />
+        
+        {user?.role === "owner" && (
+          <NavItem href="/orders" icon={Truck} label={t('sidebar.supplierOrders')} />
+        )}
+        
         <NavItem href="/customers" icon={Users} label={t('sidebar.customers')} />
         <NavItem href="/debt" icon={CreditCard} label={t('sidebar.debtTracking')} />
         

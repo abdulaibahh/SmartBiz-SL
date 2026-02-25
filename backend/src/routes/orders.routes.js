@@ -2,10 +2,11 @@ const router = require("express").Router();
 const db = require("../config/db");
 const auth = require("../middlewares/auth");
 const sub = require("../middlewares/subscription");
+const roleAuth = require("../middlewares/role");
 
-/* ================= GET ALL ORDERS ================= */
+/* ================= GET ALL ORDERS (Owner Only) ================= */
 
-router.get("/all", auth, sub, async (req, res) => {
+router.get("/all", auth, sub, roleAuth("owner"), async (req, res) => {
   try {
     const orders = await db.query(
       `SELECT * FROM orders WHERE business_id=$1 ORDER BY created_at DESC`,
@@ -18,9 +19,9 @@ router.get("/all", auth, sub, async (req, res) => {
   }
 });
 
-/* ================= GET SINGLE ORDER ================= */
+/* ================= GET SINGLE ORDER (Owner Only) ================= */
 
-router.get("/:id", auth, sub, async (req, res) => {
+router.get("/:id", auth, sub, roleAuth("owner"), async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -49,9 +50,9 @@ router.get("/:id", auth, sub, async (req, res) => {
   }
 });
 
-/* ================= CREATE ORDER ================= */
+/* ================= CREATE ORDER (Owner Only) ================= */
 
-router.post("/", auth, sub, async (req, res) => {
+router.post("/", auth, sub, roleAuth("owner"), async (req, res) => {
   try {
     const { supplier_name, supplier_contact, expected_delivery_date, items, notes } = req.body;
     
@@ -98,9 +99,9 @@ router.post("/", auth, sub, async (req, res) => {
   }
 });
 
-/* ================= RECEIVE ORDER (AUTO-INCREASE STOCK) ================= */
+/* ================= RECEIVE ORDER (Owner Only) ================= */
 
-router.put("/:id/receive", auth, sub, async (req, res) => {
+router.put("/:id/receive", auth, sub, roleAuth("owner"), async (req, res) => {
   try {
     const { id } = req.params;
     const { items } = req.body;
@@ -173,9 +174,9 @@ router.put("/:id/receive", auth, sub, async (req, res) => {
   }
 });
 
-/* ================= DELETE ORDER ================= */
+/* ================= DELETE ORDER (Owner Only) ================= */
 
-router.delete("/:id", auth, sub, async (req, res) => {
+router.delete("/:id", auth, sub, roleAuth("owner"), async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -202,9 +203,9 @@ router.delete("/:id", auth, sub, async (req, res) => {
   }
 });
 
-/* ================= GET SUPPLIER PAYMENTS ================= */
+/* ================= GET SUPPLIER PAYMENTS (Owner Only) ================= */
 
-router.get("/:orderId/payments", auth, sub, async (req, res) => {
+router.get("/:orderId/payments", auth, sub, roleAuth("owner"), async (req, res) => {
   try {
     const { orderId } = req.params;
     
@@ -220,9 +221,9 @@ router.get("/:orderId/payments", auth, sub, async (req, res) => {
   }
 });
 
-/* ================= RECORD SUPPLIER PAYMENT ================= */
+/* ================= RECORD SUPPLIER PAYMENT (Owner Only) ================= */
 
-router.post("/:orderId/payment", auth, sub, async (req, res) => {
+router.post("/:orderId/payment", auth, sub, roleAuth("owner"), async (req, res) => {
   try {
     const { orderId } = req.params;
     const { amount, payment_method, reference_number, notes } = req.body;
