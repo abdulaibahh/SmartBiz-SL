@@ -1,12 +1,13 @@
 const router = require("express").Router();
 const db = require("../config/db");
 const auth = require("../middlewares/auth");
+const roleAuth = require("../middlewares/role");
 const path = require("path");
 const fs = require("fs");
 
-/* ================= GET BUSINESS SETTINGS ================= */
+/* ================= GET BUSINESS SETTINGS (Owner Only)  */
 
-router.get("/", auth, async (req, res) => {
+router.get("/", auth, roleAuth("owner"), async (req, res) => {
   try {
     const result = await db.query(
       "SELECT id, name, shop_name, address, phone, logo_url FROM businesses WHERE id=$1",
@@ -24,9 +25,9 @@ router.get("/", auth, async (req, res) => {
   }
 });
 
-/* ================= UPLOAD LOGO ================= */
+/* ================= UPLOAD LOGO (Owner Only) ================= */
 
-router.post("/logo", auth, async (req, res) => {
+router.post("/logo", auth, roleAuth("owner"), async (req, res) => {
   try {
     const { logo } = req.body;
     
@@ -88,9 +89,9 @@ router.post("/logo", auth, async (req, res) => {
   }
 });
 
-/* ================= UPDATE BUSINESS SETTINGS ================= */
+/* ================= UPDATE BUSINESS SETTINGS (Owner Only) ================= */
 
-router.put("/", auth, async (req, res) => {
+router.put("/", auth, roleAuth("owner"), async (req, res) => {
   try {
     const { shop_name, address, phone, logo_url } = req.body;
     
@@ -125,9 +126,9 @@ router.put("/", auth, async (req, res) => {
   }
 });
 
-/* ================= DELETE BUSINESS ACCOUNT ================= */
+/* ================= DELETE BUSINESS ACCOUNT (Owner Only) ================= */
 
-router.delete("/account", auth, async (req, res) => {
+router.delete("/account", auth, roleAuth("owner"), async (req, res) => {
   const business_id = req.user.business_id;
   
   try {

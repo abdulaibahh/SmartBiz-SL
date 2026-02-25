@@ -2,11 +2,16 @@
 
 import { useState, useEffect, useRef } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { useAuth } from "@/providers/AuthContext";
 import { businessAPI, authAPI } from "@/services/api";
 import toast from "react-hot-toast";
-import { Settings, User, Building2, Mail, Save, Loader2, Upload, Image, AlertTriangle, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Settings, User, Building2, Mail, Save, Loader2, Upload, Image, AlertTriangle, X, Lock } from "lucide-react";
 
 function SettingsContent() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const isOwner = user?.role === 'owner';
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -20,9 +25,23 @@ function SettingsContent() {
   });
   const fileInputRef = useRef(null);
 
+  // Redirect non-owners away from settings page
   useEffect(() => {
-    loadBusiness();
-  }, []);
+    if (!isOwner) {
+      router.push('/');
+    }
+  }, [isOwner, router]);
+
+  useEffect(() => {
+    if (isOwner) {
+      loadBusiness();
+    }
+  }, [isOwner]);
+
+  // Show loading while checking or redirecting
+  if (!isOwner) {
+    return null;
+  }
 
   const loadBusiness = async () => {
     try {

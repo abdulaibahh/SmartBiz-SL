@@ -76,10 +76,22 @@ router.get("/all", auth, async (req, res) => {
       console.log("[INVENTORY] Migration note:", migErr.message);
     }
     
-    const inventory = await db.query(
-      "SELECT * FROM inventory WHERE business_id=$1 ORDER BY product",
-      [req.user.business_id]
-    );
+    const isOwner = req.user.role === 'owner';
+    
+    let inventory;
+    if (isOwner) {
+      // Owners can see all data including cost_price
+      inventory = await db.query(
+        "SELECT * FROM inventory WHERE business_id=$1 ORDER BY product",
+        [req.user.business_id]
+      );
+    } else {
+      // Non-owners (cashiers, managers) cannot see cost_price
+      inventory = await db.query(
+        "SELECT id, business_id, product, quantity, retail_quantity, wholesale_quantity, retail_price, wholesale_price, selling_price, created_at, updated_at FROM inventory WHERE business_id=$1 ORDER BY product",
+        [req.user.business_id]
+      );
+    }
     console.log("[INVENTORY] Found:", inventory.rows.length, "items");
     
     // Log first item to debug
@@ -94,12 +106,18 @@ router.get("/all", auth, async (req, res) => {
   }
 });
 
-// Add retail stock
+// Add retail stock - all users can add stock but only owners can set cost_price
 router.post("/retail", auth, sub, async (req, res) => {
-  const { product, quantity, cost_price, retail_price } = req.body;
+  let { product, quantity, cost_price, retail_price } = req.body;
 
   if (!product || !quantity) {
     return res.status(400).json({ message: "Product and quantity required" });
+  }
+
+  // Non-owners cannot set cost_price
+  const isOwner = req.user.role === 'owner';
+  if (!isOwner) {
+    cost_price = undefined;
   }
 
   try {
@@ -113,15 +131,31 @@ router.post("/retail", auth, sub, async (req, res) => {
     const cost = cost_price || 0;
 
     if (existing.rows.length) {
-      await db.query(
-        "UPDATE inventory SET retail_quantity = COALESCE(retail_quantity, 0) + $1, retail_price = $2, selling_price = $2, cost_price = $3, wholesale_price = COALESCE(wholesale_price, $2), updated_at = NOW() WHERE business_id = $4 AND product = $5",
-        [quantity, price, cost, req.user.business_id, product]
-      );
+      // Non-owners can only add quantity, cannot update cost_price
+      if (isOwner) {
+        await db.query(
+          "UPDATE inventory SET retail_quantity = COALESCE(retail_quantity, 0) + $1, retail_price = $2, selling_price = $2, cost_price = $3, wholesale_price = COALESCE(wholesale_price, $2), updated_at = NOW() WHERE business_id = $4 AND product = $5",
+          [quantity, price, cost, req.user.business_id, product]
+        );
+      } else {
+        await db.query(
+          "UPDATE inventory SET retail_quantity = COALESCE(retail_quantity, 0) + $1, retail_price = $2, selling_price = $2, wholesale_price = COALESCE(wholesale_price, $2), updated_at = NOW() WHERE business_id = $3 AND product = $4",
+          [quantity, price, req.user.business_id, product]
+        );
+      }
     } else {
-      await db.query(
-        "INSERT INTO inventory(business_id, product, retail_quantity, cost_price, retail_price, selling_price, wholesale_price, quantity, updated_at) VALUES($1, $2, $3, $4, $5, $5, $5, $3, NOW())",
-        [req.user.business_id, product, quantity, cost, price]
-      );
+      // New product - owner can set cost_price, non-owners cannot
+      if (isOwner) {
+        await db.query(
+          "INSERT INTO inventory(business_id, product, retail_quantity, cost_price, retail_price, selling_price, wholesale_price, quantity, updated_at) VALUES($1, $2, $3, $4, $5, $5, $5, $3, NOW())",
+          [req.user.business_id, product, quantity, cost, price]
+        );
+      } else {
+        await db.query(
+          "INSERT INTO inventory(business_id, product, retail_quantity, retail_price, selling_price, wholesale_price, quantity, updated_at) VALUES($1, $2, $3, $4, $4, $4, $3, NOW())",
+          [req.user.business_id, product, quantity, price]
+        );
+      }
     }
 
     res.json({ message: "Retail stock added" });
@@ -131,12 +165,18 @@ router.post("/retail", auth, sub, async (req, res) => {
   }
 });
 
-// Add wholesale stock
+// Add wholesale stock - all users can add stock but only owners can set cost_price
 router.post("/wholesale", auth, sub, async (req, res) => {
-  const { product, quantity, cost_price, wholesale_price } = req.body;
+  let { product, quantity, cost_price, wholesale_price } = req.body;
 
   if (!product || !quantity) {
     return res.status(400).json({ message: "Product and quantity required" });
+  }
+
+  // Non-owners cannot set cost_price
+  const isOwner = req.user.role === 'owner';
+  if (!isOwner) {
+    cost_price = undefined;
   }
 
   try {
@@ -150,15 +190,31 @@ router.post("/wholesale", auth, sub, async (req, res) => {
     const cost = cost_price || 0;
 
     if (existing.rows.length) {
-      await db.query(
-        "UPDATE inventory SET wholesale_quantity = COALESCE(wholesale_quantity, 0) + $1, wholesale_price = $2, selling_price = $2, cost_price = $3, retail_price = COALESCE(retail_price, $2), updated_at = NOW() WHERE business_id = $4 AND product = $5",
-        [quantity, price, cost, req.user.business_id, product]
-      );
+      // Non-owners can only add quantity, cannot update cost_price
+      if (isOwner) {
+        await db.query(
+          "UPDATE inventory SET wholesale_quantity = COALESCE(wholesale_quantity, 0) + $1, wholesale_price = $2, selling_price = $2, cost_price = $3, retail_price = COALESCE(retail_price, $2), updated_at = NOW() WHERE business_id = $4 AND product = $5",
+          [quantity, price, cost, req.user.business_id, product]
+        );
+      } else {
+        await db.query(
+          "UPDATE inventory SET wholesale_quantity = COALESCE(wholesale_quantity, 0) + $1, wholesale_price = $2, selling_price = $2, retail_price = COALESCE(retail_price, $2), updated_at = NOW() WHERE business_id = $3 AND product = $4",
+          [quantity, price, req.user.business_id, product]
+        );
+      }
     } else {
-      await db.query(
-        "INSERT INTO inventory(business_id, product, wholesale_quantity, cost_price, wholesale_price, selling_price, retail_price, quantity, updated_at) VALUES($1, $2, $3, $4, $5, $5, $5, $3, NOW())",
-        [req.user.business_id, product, quantity, cost, price]
-      );
+      // New product - owner can set cost_price, non-owners cannot
+      if (isOwner) {
+        await db.query(
+          "INSERT INTO inventory(business_id, product, wholesale_quantity, cost_price, wholesale_price, selling_price, retail_price, quantity, updated_at) VALUES($1, $2, $3, $4, $5, $5, $5, $3, NOW())",
+          [req.user.business_id, product, quantity, cost, price]
+        );
+      } else {
+        await db.query(
+          "INSERT INTO inventory(business_id, product, wholesale_quantity, wholesale_price, selling_price, retail_price, quantity, updated_at) VALUES($1, $2, $3, $4, $4, $4, $3, NOW())",
+          [req.user.business_id, product, quantity, price]
+        );
+      }
     }
 
     res.json({ message: "Wholesale stock added" });
@@ -256,6 +312,12 @@ router.post("/supplier-order", auth, sub, async (req, res) => {
     return res.status(400).json({ message: "Product and quantity required" });
   }
 
+  // Non-owners cannot set cost_price when adding new products
+  let finalCostPrice = cost_price;
+  if (req.user.role !== 'owner') {
+    finalCostPrice = undefined;
+  }
+
   try {
     console.log("[INVENTORY] Checking for existing product:", product);
     const existing = await db.query(
@@ -285,9 +347,10 @@ router.post("/supplier-order", auth, sub, async (req, res) => {
         updates.push(`wholesale_quantity = COALESCE(wholesale_quantity, 0) + $${paramIndex++}`);
         params.push(quantity);
       }
-      if (cost_price !== undefined) {
+      // Only owners can update cost_price
+      if (finalCostPrice !== undefined) {
         updates.push(`cost_price = $${paramIndex++}`);
-        params.push(cost_price);
+        params.push(finalCostPrice);
       }
       if (selling_price !== undefined) {
         // Always update selling_price for backward compatibility
@@ -316,10 +379,18 @@ router.post("/supplier-order", auth, sub, async (req, res) => {
       const retailPrice = selling_price || 0;
       const wholesalePrice = selling_price || 0;
       
-      await db.query(
-        "INSERT INTO inventory(business_id, product, retail_quantity, wholesale_quantity, cost_price, retail_price, wholesale_price, selling_price, quantity, updated_at) VALUES($1, $2, $3, $4, $5, $6, $7, $6, $3, NOW())",
-        [req.user.business_id, product, retailQty, wholesaleQty, cost_price || 0, retailPrice, wholesalePrice]
-      );
+      // Only owners can set cost_price
+      if (req.user.role === 'owner') {
+        await db.query(
+          "INSERT INTO inventory(business_id, product, retail_quantity, wholesale_quantity, cost_price, retail_price, wholesale_price, selling_price, quantity, updated_at) VALUES($1, $2, $3, $4, $5, $6, $7, $6, $3, NOW())",
+          [req.user.business_id, product, retailQty, wholesaleQty, finalCostPrice || 0, retailPrice, wholesalePrice]
+        );
+      } else {
+        await db.query(
+          "INSERT INTO inventory(business_id, product, retail_quantity, wholesale_quantity, retail_price, wholesale_price, selling_price, quantity, updated_at) VALUES($1, $2, $3, $4, $5, $6, $6, $3, NOW())",
+          [req.user.business_id, product, retailQty, wholesaleQty, retailPrice, wholesalePrice]
+        );
+      }
     }
 
     console.log("[INVENTORY] Success!");
