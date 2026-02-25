@@ -94,7 +94,10 @@ export default function Sidebar() {
         </div>
         
         <NavItem href="/subscription" icon={CreditCard} label={t('sidebar.subscription')} />
-        <NavItem href="/admin/settings" icon={Settings} label={t('sidebar.businessSettings')} />
+        
+        {user?.role === "owner" && (
+          <NavItem href="/admin/settings" icon={Settings} label={t('sidebar.businessSettings')} />
+        )}
         
         {user?.role === "owner" && (
           <NavItem href="/admin/users" icon={UserPlus} label={t('sidebar.manageUsers')} />
